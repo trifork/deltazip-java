@@ -31,15 +31,15 @@ public class DeltaZip {
 	private static final int VERSION_SIZE_LIMIT = 1 << VERSION_SIZE_BITS;
 
 	private static final int METHOD_UNCOMPRESSED = 0;
-	private static final int METHOD_CHUNKED_DEFLATE = 2;
+	private static final int METHOD_CHUNKED = 2;
 
 	protected static final CompressionMethod[] COMPRESSION_METHODS;
 	protected static final CompressionMethod UNCOMPRESSED_INSTANCE = new UncompressedMethod();
-	protected static final CompressionMethod CHUNKED_DEFLATE_INSTANCE = new ChunkedDeflateMethod();
+	protected static final CompressionMethod CHUNKED_INSTANCE = new ChunkedMethod();
 	static {
 		COMPRESSION_METHODS = new CompressionMethod[16];
 		insertCM(COMPRESSION_METHODS, UNCOMPRESSED_INSTANCE);
-		insertCM(COMPRESSION_METHODS, CHUNKED_DEFLATE_INSTANCE);
+		insertCM(COMPRESSION_METHODS, CHUNKED_INSTANCE);
 	}
 	private static void insertCM(CompressionMethod[] table, CompressionMethod cm) {
 		table[cm.methodNumber()] = cm;
@@ -85,6 +85,8 @@ public class DeltaZip {
 	 *  Has the side effect of placing the cursor at the end.
 	 */
 	public AppendSpecification add(ByteBuffer new_version) throws IOException {
+		int save_pos = new_version.position();
+
 		set_cursor_at_end();
 		ExtByteArrayOutputStream baos = new ExtByteArrayOutputStream();
 		ByteBuffer last_version = get();
@@ -92,6 +94,8 @@ public class DeltaZip {
 			pack_compressed(last_version, toByteArray(new_version), baos);
 		}
 		pack_uncompressed(new_version, baos);
+
+		new_version.position(save_pos);
 		return new AppendSpecification(current_pos, baos.toByteArray());
 	}
 
@@ -137,18 +141,20 @@ public class DeltaZip {
 		pack_entry(version, null, UNCOMPRESSED_INSTANCE, dst);
 	}
 	protected void pack_compressed(ByteBuffer version, byte[] ref_version, ExtByteArrayOutputStream dst) {
-		pack_entry(version, ref_version, CHUNKED_DEFLATE_INSTANCE, dst);
+		pack_entry(version, ref_version, CHUNKED_INSTANCE, dst);
 	}
 
 	protected void pack_entry(ByteBuffer version, byte[] ref_version, CompressionMethod cm, ExtByteArrayOutputStream dst) {
-		int tag_blank = dst.insertBlank(2);
+		int tag_blank = dst.insertBlank(4);
 		int size_before = dst.size();
 		cm.compress(version, ref_version, dst);
 		int size_after = dst.size();
 		int length = size_after - size_before;
-		if (length >= VERSION_SIZE_LIMIT) throw new IllegalArgumentException("Version is too big");
+
+		if (length >= VERSION_SIZE_LIMIT) throw new IllegalArgumentException("Version is too big to store");
 		int tag = (cm.methodNumber() << VERSION_SIZE_BITS) | length;
-		dst.fillBlankWithBigEndianInteger(tag_blank, tag, 2);
+		dst.fillBlankWithBigEndianInteger(tag_blank, tag, 4);
+		dst.writeBigEndianInteger(tag, 4);
 	}
 
 	//==================== Compression methods =============================
@@ -170,8 +176,8 @@ public class DeltaZip {
 		public byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) {return toByteArray(org);}
 	}
 
-	protected static class ChunkedDeflateMethod extends CompressionMethod {
-		public int methodNumber() {return METHOD_CHUNKED_DEFLATE;}
+	protected static class ChunkedMethod extends CompressionMethod {
+		public int methodNumber() {return METHOD_CHUNKED;}
 
 		private static final int CHUNK_METHOD_DEFLATE = 0;
 		private static final int CHUNK_METHOD_PREFIX_COPY = 1;
@@ -287,6 +293,12 @@ public class DeltaZip {
 			if (len>4) throw new IllegalArgumentException("length is > 4");
 			for (int i=len-1; i>=0; i--) {
 				buf[pos++] = (byte) (value >> (8*i));
+			}
+		}
+
+		public void writeBigEndianInteger(int value, int len) {
+			for (int i=len-1; i>=0; i--) {
+				write(value >> (8*i));
 			}
 		}
 	}
