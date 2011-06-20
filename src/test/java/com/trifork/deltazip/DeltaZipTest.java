@@ -64,11 +64,17 @@ public class DeltaZipTest {
 	@Test
 	public void test_add_get() throws Exception {
 		ByteBuffer rev1 = ByteBuffer.wrap("Hello".getBytes("ISO-8859-1"));
+		ByteBuffer rev1a = ByteBuffer.wrap("World!".getBytes("ISO-8859-1"));
 		ByteBuffer rev2 = ByteBuffer.wrap("Hello, World!".getBytes("ISO-8859-1"));
-		System.err.println("DB| rev1: "+rev1);
-		System.err.println("DB| rev1: "+rev1);
+
 		byte[] file0 = new byte[] {};
 
+		test_add_get_with(file0, rev1,rev2); // Would use 'prefix-copy' chunk.
+		test_add_get_with(file0, rev1a,rev2); // Would use 'offset-copy' chunk.
+		//test_add_get_with(file0, rev2,rev1); // Would use 'deflate' chunk.
+	}
+	
+	public void test_add_get_with(byte[] file0, ByteBuffer rev1, ByteBuffer rev2) throws IOException {
 		ByteArrayAccess access0 = new ByteArrayAccess(file0);
 		DeltaZip dz0 = new DeltaZip(access0);
 		AppendSpecification app1 = dz0.add(rev1);
@@ -85,7 +91,7 @@ public class DeltaZipTest {
 		DeltaZip dz2 = new DeltaZip(access2);
 
 		// Tests:
-		assertEquals(dz1.get(), rev1); //rev1.rewind();
+		assertEquals(dz1.get(), rev1);
 
 		assertEquals(dz2.get(), rev2);
 		dz2.previous();

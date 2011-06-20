@@ -8,8 +8,11 @@ import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.nio.channels.Channels;
 import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.OutputStream;
 import java.io.IOException;
+
+import java.util.ArrayList;
 
 public class DeltaZip {
 
@@ -65,7 +68,8 @@ public class DeltaZip {
 
 	/** Get the revision pointed to by the cursor. */
 	public ByteBuffer get() {
-		return exposed_current_version;
+		return (exposed_current_version==null) ? null
+			: exposed_current_version.duplicate();
 	}
 
 	/** Tells whether there are older revisions. */
@@ -95,7 +99,7 @@ public class DeltaZip {
 		}
 		pack_uncompressed(new_version, baos);
 
-		new_version.position(save_pos);
+		new_version.position(save_pos); // Restore as-was.
 		return new AppendSpecification(current_pos, baos.toByteArray());
 	}
 
@@ -184,7 +188,48 @@ public class DeltaZip {
 		private static final int CHUNK_METHOD_OFFSET_COPY = 2;
 
 		public void compress(ByteBuffer org, byte[] ref_data, OutputStream dst) {
-			//TODO
+			try {
+				ArrayList<ChunkOption> chunk_options = new ArrayList<ChunkOption>();
+				DataOutputStream dos = new DataOutputStream(dst);
+
+				int ref_data_offset = 0;
+				while (org.hasRemaining()) {
+					System.err.println("DB| Chunking from ("+org.position()+","+ref_data_offset+")");
+					System.err.println("DB| Remaining: ("+org.remaining()+","+(ref_data.length - ref_data_offset)+")");
+					chunk_options.clear();
+
+					int save_pos = org.position();
+					addIfApplicable(chunk_options, PrefixChunkOption.create(org, ref_data, ref_data_offset));
+					org.position(save_pos);
+					addIfApplicable(chunk_options, SuffixChunkOption.create(org, ref_data, ref_data_offset));
+					org.position(save_pos);
+
+					ChunkOption chunk_option = findBestCandidate(chunk_options);
+					chunk_option.write(dos);
+
+					System.err.println("DB| setting pos: "+org.position()+", "+org.limit()+", "+(save_pos + chunk_option.uncomp_size));
+					org.position(save_pos + chunk_option.uncomp_size);
+					ref_data_offset += chunk_option.rskip;
+				}
+			} catch (IOException ioe) {throw new RuntimeException(ioe);}
+		}
+
+		protected static void addIfApplicable(ArrayList<ChunkOption> list, ChunkOption option) {
+			if (option != null) list.add(option);
+		}
+
+		protected static ChunkOption findBestCandidate(Iterable<ChunkOption> chunk_options) {
+			double best_ratio = Double.MAX_VALUE;
+			ChunkOption best_candidate = null;
+			for (ChunkOption co : chunk_options) {
+				double candidate_ratio = co.ratio();
+				if (candidate_ratio < best_ratio) {
+					best_candidate = co;
+					best_ratio = candidate_ratio;
+				}
+			}
+			System.err.println("DB| choosing chunk option "+best_candidate+" with ratio "+best_ratio);
+			return best_candidate;
 		}
 
 		public byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) throws IOException {
@@ -256,7 +301,116 @@ public class DeltaZip {
 			channel.write(src2);
 			ios.finish();
 		}
-	}
+
+		static abstract class ChunkOption {
+			public final int comp_size, uncomp_size;
+			public final int rskip;
+
+			public ChunkOption(int comp_size, int uncomp_size, int rskip) {
+				this.comp_size = comp_size;
+				this.uncomp_size = uncomp_size;
+				this.rskip = rskip;
+			}
+
+			public double ratio() {
+				final int OVERHEAD_PENALTY_BYTES = 30;
+				return (comp_size + OVERHEAD_PENALTY_BYTES) / uncomp_size;
+			}
+
+			public final void write(DataOutputStream dos) throws IOException {
+				dos.write(chunkMethod());
+				dos.writeChar(comp_size);
+				writeCompData(dos);
+			}
+
+			public abstract int chunkMethod();
+			public abstract void writeCompData(DataOutputStream dos) throws IOException;
+		}
+
+		static class PrefixChunkOption extends ChunkOption {
+			static final int SIZE_LIMIT = (1<<16);
+
+			public static PrefixChunkOption create(ByteBuffer data, byte[] ref_data, int ref_data_offset) {
+				int start_pos = data.position();
+				int limit = Math.min(SIZE_LIMIT,
+									 Math.min(data.remaining(), ref_data.length - ref_data_offset));
+				int i = 0;
+				if (limit>0) {
+					System.err.println("PrefixChunkOption.create(): first data byte is "+data.get(start_pos));
+					System.err.println("PrefixChunkOption.create(): first ref byte is "+ref_data[ref_data_offset]);
+				}
+				while (i < limit &&
+					   data.get(start_pos + i) == ref_data[ref_data_offset + i]) {
+					i++;
+				}
+				int prefix_length = i;
+
+				return (prefix_length <= 0) ? null
+					: new PrefixChunkOption(prefix_length);
+			}
+
+			public PrefixChunkOption(int prefix_length) {
+				// Size of chunk contents is 2 bytes.
+				super(2, prefix_length, prefix_length);
+			}
+
+			public int chunkMethod() {return CHUNK_METHOD_PREFIX_COPY << 3;}
+
+			public void writeCompData(DataOutputStream dos) throws IOException {
+				int prefix_length = this.uncomp_size;
+				dos.writeShort((short)(prefix_length-1));
+			}
+
+			public String toString() {return "PrefixChunkOption("+uncomp_size+")";}
+		}
+
+		static class SuffixChunkOption extends ChunkOption {
+			static final int SIZE_LIMIT = (1<<16);
+
+			public static SuffixChunkOption create(ByteBuffer data, byte[] ref_data, int ref_data_offset) {
+				int end_pos = data.limit();
+				int remaining_data = data.remaining();
+				int remaining_ref = ref_data.length - ref_data_offset;
+				int offset = remaining_ref - remaining_data;
+
+				if (offset <= 0 || offset > SIZE_LIMIT) return null;
+
+				int limit = Math.min(remaining_data, remaining_ref);
+				int i = 0;
+				while (i < limit &&
+					   data.get(end_pos - 1 - i) == ref_data[ref_data.length - 1 - i]) {
+					i++;
+				}
+				int suffix_length = i;
+				if (suffix_length < remaining_data) return null; // First part of data is not covered.
+				suffix_length = Math.min(suffix_length, SIZE_LIMIT);
+				
+				return (suffix_length <= 0) ? null
+					: new SuffixChunkOption(offset, suffix_length);
+			}
+
+			public SuffixChunkOption(int offset, int suffix_length) {
+				// Size of chunk contents is 4 bytes.
+				super(4, suffix_length, offset+suffix_length);
+			}
+
+			public int chunkMethod() {return CHUNK_METHOD_OFFSET_COPY << 3;}
+
+			public void writeCompData(DataOutputStream dos) throws IOException {
+				int suffix_length = this.uncomp_size;
+				int offset = this.rskip - suffix_length;
+				dos.writeShort((short)(offset-1));
+				dos.writeShort((short)(suffix_length-1));
+			}
+
+			public String toString() {
+				int suffix_length = this.uncomp_size;
+				int offset = this.rskip - suffix_length;
+				return "SuffixChunkOption("+offset+","+suffix_length+")";
+			}
+		}
+
+	}// class ChunkedMethod
 
 	public static byte[] toByteArray(ByteBuffer org) {
 		if (org.hasArray()) return org.array();
