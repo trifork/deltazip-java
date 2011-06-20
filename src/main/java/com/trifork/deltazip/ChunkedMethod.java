@@ -40,50 +40,8 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 	private static final int CHUNK_METHOD_PREFIX_COPY = 1;
 	private static final int CHUNK_METHOD_OFFSET_COPY = 2;
 
-	public void compress(ByteBuffer org, byte[] ref_data, OutputStream dst) {
-		try {
-			ArrayList<ChunkOption> chunk_options = new ArrayList<ChunkOption>();
-			DataOutputStream dos = new DataOutputStream(dst);
 
-			int ref_data_offset = 0;
-			while (org.hasRemaining()) {
-				System.err.println("DB| Chunking from ("+org.position()+","+ref_data_offset+")");
-				System.err.println("DB| Remaining: ("+org.remaining()+","+(ref_data.length - ref_data_offset)+")");
-				chunk_options.clear();
-
-				int save_pos = org.position();
-				addIfApplicable(chunk_options, PrefixChunkOption.create(org, ref_data, ref_data_offset));
-				org.position(save_pos);
-				addIfApplicable(chunk_options, SuffixChunkOption.create(org, ref_data, ref_data_offset));
-				org.position(save_pos);
-
-				ChunkOption chunk_option = findBestCandidate(chunk_options);
-				chunk_option.write(dos);
-
-				org.position(save_pos + chunk_option.uncomp_size);
-				ref_data_offset += chunk_option.rskip;
-			}
-		} catch (IOException ioe) {throw new RuntimeException(ioe);}
-	}
-
-	protected static void addIfApplicable(ArrayList<ChunkOption> list, ChunkOption option) {
-		if (option != null) list.add(option);
-	}
-
-	protected static ChunkOption findBestCandidate(Iterable<ChunkOption> chunk_options) {
-		double best_ratio = Double.MAX_VALUE;
-		ChunkOption best_candidate = null;
-		for (ChunkOption co : chunk_options) {
-			double candidate_ratio = co.ratio();
-			if (candidate_ratio < best_ratio) {
-				best_candidate = co;
-				best_ratio = candidate_ratio;
-			}
-		}
-		System.err.println("DB| choosing chunk option "+best_candidate+" with ratio "+best_ratio);
-		return best_candidate;
-	}
-
+	//==================== Uncompression: ========================================
 	public byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) throws IOException {
 		ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
@@ -137,21 +95,49 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 		return baos.toByteArray();
 	}
 
-	public static int spec_to_rskip(int rskip_spec) {
-		return rskip_spec * (CHUNK_SIZE / 2);
+	//==================== Compression: ========================================
+	public void compress(ByteBuffer org, byte[] ref_data, OutputStream dst) {
+		try {
+			ArrayList<ChunkOption> chunk_options = new ArrayList<ChunkOption>();
+			DataOutputStream dos = new DataOutputStream(dst);
+
+			int ref_data_offset = 0;
+			while (org.hasRemaining()) {
+				System.err.println("DB| Chunking from ("+org.position()+","+ref_data_offset+")");
+				System.err.println("DB| Remaining: ("+org.remaining()+","+(ref_data.length - ref_data_offset)+")");
+				chunk_options.clear();
+
+				int save_pos = org.position();
+				addIfApplicable(chunk_options, PrefixChunkOption.create(org, ref_data, ref_data_offset));
+				org.position(save_pos);
+				addIfApplicable(chunk_options, SuffixChunkOption.create(org, ref_data, ref_data_offset));
+				org.position(save_pos);
+
+				ChunkOption chunk_option = findBestCandidate(chunk_options);
+				chunk_option.write(dos);
+
+				org.position(save_pos + chunk_option.uncomp_size);
+				ref_data_offset += chunk_option.rskip;
+			}
+		} catch (IOException ioe) {throw new RuntimeException(ioe);}
 	}
 
-	protected static void inflate(Inflater inflater, ByteBuffer src, int comp_length, OutputStream dst, Dictionary dict) throws IOException {
-		InflaterOutputStream ios = new InflaterOutputStream(dst, inflater);
-		WritableByteChannel channel = Channels.newChannel(ios);
+	protected static void addIfApplicable(ArrayList<ChunkOption> list, ChunkOption option) {
+		if (option != null) list.add(option);
+	}
 
-		ByteBuffer src2 = src.duplicate();
-		src2.limit(src2.position() + comp_length);
-		src.position(src.position() + comp_length);
-
-		inflater.setDictionary(dict.data, dict.off, dict.len);
-		channel.write(src2);
-		ios.finish();
+	protected static ChunkOption findBestCandidate(Iterable<ChunkOption> chunk_options) {
+		double best_ratio = Double.MAX_VALUE;
+		ChunkOption best_candidate = null;
+		for (ChunkOption co : chunk_options) {
+			double candidate_ratio = co.ratio();
+			if (candidate_ratio < best_ratio) {
+				best_candidate = co;
+				best_ratio = candidate_ratio;
+			}
+		}
+		System.err.println("DB| choosing chunk option "+best_candidate+" with ratio "+best_ratio);
+		return best_candidate;
 	}
 
 	static abstract class ChunkOption {
@@ -179,6 +165,9 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 		public abstract void writeCompData(DataOutputStream dos) throws IOException;
 	}
 
+	//==================== Concrete chunk options: ========================================
+
+	//========== PrefixChunkOption ====================
 	static class PrefixChunkOption extends ChunkOption {
 		static final int SIZE_LIMIT = (1<<16);
 
@@ -216,6 +205,7 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 		public String toString() {return "PrefixChunkOption("+uncomp_size+")";}
 	}
 
+	//========== SuffixChunkOption ====================
 	static class SuffixChunkOption extends ChunkOption {
 		static final int SIZE_LIMIT = (1<<16);
 
@@ -260,6 +250,28 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 			int offset = this.rskip - suffix_length;
 			return "SuffixChunkOption("+offset+","+suffix_length+")";
 		}
+	} // Class SuffixChunkOption
+
+	//========== DeflateChunkOption ====================
+	//TODO
+
+	//==================== Common helpers =======================================
+
+	public static int spec_to_rskip(int rskip_spec) {
+		return rskip_spec * (CHUNK_SIZE / 2);
+	}
+
+	protected static void inflate(Inflater inflater, ByteBuffer src, int comp_length, OutputStream dst, Dictionary dict) throws IOException {
+		InflaterOutputStream ios = new InflaterOutputStream(dst, inflater);
+		WritableByteChannel channel = Channels.newChannel(ios);
+
+		ByteBuffer src2 = src.duplicate();
+		src2.limit(src2.position() + comp_length);
+		src.position(src.position() + comp_length);
+
+		inflater.setDictionary(dict.data, dict.off, dict.len);
+		channel.write(src2);
+		ios.finish();
 	}
 
 	private static class Dictionary {
