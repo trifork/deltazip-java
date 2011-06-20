@@ -27,14 +27,22 @@ public class DeltaZip {
 	 */
 	private static final int LIMIT_SO_DEFLATED_FITS_IN_64KB = 65000;
 
+	private static final int VERSION_SIZE_BITS = 28;
+	private static final int VERSION_SIZE_LIMIT = 1 << VERSION_SIZE_BITS;
+
 	private static final int METHOD_UNCOMPRESSED = 0;
 	private static final int METHOD_CHUNKED_DEFLATE = 2;
 
 	protected static final CompressionMethod[] COMPRESSION_METHODS;
+	protected static final CompressionMethod UNCOMPRESSED_INSTANCE = new UncompressedMethod();
+	protected static final CompressionMethod CHUNKED_DEFLATE_INSTANCE = new ChunkedDeflateMethod();
 	static {
 		COMPRESSION_METHODS = new CompressionMethod[16];
-		COMPRESSION_METHODS[METHOD_UNCOMPRESSED] = new UncompressedMethod();
-		COMPRESSION_METHODS[METHOD_CHUNKED_DEFLATE] = new ChunkedDeflateMethod();
+		insertCM(COMPRESSION_METHODS, UNCOMPRESSED_INSTANCE);
+		insertCM(COMPRESSION_METHODS, CHUNKED_DEFLATE_INSTANCE);
+	}
+	private static void insertCM(CompressionMethod[] table, CompressionMethod cm) {
+		table[cm.methodNumber()] = cm;
 	}
 	
 
@@ -47,11 +55,12 @@ public class DeltaZip {
 	private int        current_method;
 	private byte[]     current_version;
 	private ByteBuffer exposed_current_version;
+
+	//==================== API ==========================================
 	
 	public DeltaZip(Access access) throws IOException {
 		this.access = access;
-		set_initial_position();
-		if (hasPrevious()) previous();
+		set_cursor_at_end();
 	}
 
 	/** Get the revision pointed to by the cursor. */
@@ -72,7 +81,26 @@ public class DeltaZip {
 		goto_previous_position_and_compute_current_version();
 	}
 
+	/** Computes an AppendSpecification for adding a version.
+	 *  Has the side effect of placing the cursor at the end.
+	 */
+	public AppendSpecification add(ByteBuffer new_version) throws IOException {
+		set_cursor_at_end();
+		ExtByteArrayOutputStream baos = new ExtByteArrayOutputStream();
+		ByteBuffer last_version = get();
+		if (last_version != null) {
+			pack_compressed(last_version, toByteArray(new_version), baos);
+		}
+		pack_uncompressed(new_version, baos);
+		return new AppendSpecification(current_pos, baos.toByteArray());
+	}
+
 	//==================== Internals =======================================
+
+	protected void set_cursor_at_end() throws IOException {
+		set_initial_position();
+		if (hasPrevious()) previous();
+	}
 
 	protected void set_initial_position() {
 		current_pos = access.getSize();
@@ -105,20 +133,52 @@ public class DeltaZip {
 		exposed_current_version = ByteBuffer.wrap(current_version).asReadOnlyBuffer();
 	}
 
+	protected void pack_uncompressed(ByteBuffer version, ExtByteArrayOutputStream dst) {
+		pack_entry(version, null, UNCOMPRESSED_INSTANCE, dst);
+	}
+	protected void pack_compressed(ByteBuffer version, byte[] ref_version, ExtByteArrayOutputStream dst) {
+		pack_entry(version, ref_version, CHUNKED_DEFLATE_INSTANCE, dst);
+	}
+
+	protected void pack_entry(ByteBuffer version, byte[] ref_version, CompressionMethod cm, ExtByteArrayOutputStream dst) {
+		int tag_blank = dst.insertBlank(2);
+		int size_before = dst.size();
+		cm.compress(version, ref_version, dst);
+		int size_after = dst.size();
+		int length = size_after - size_before;
+		if (length >= VERSION_SIZE_LIMIT) throw new IllegalArgumentException("Version is too big");
+		int tag = (cm.methodNumber() << VERSION_SIZE_BITS) | length;
+		dst.fillBlankWithBigEndianInteger(tag_blank, tag, 2);
+	}
+
 	//==================== Compression methods =============================
 	protected static abstract class CompressionMethod {
-		public abstract ByteBuffer compress(ByteBuffer org, byte[] ref_data) throws IOException;
+		public abstract int methodNumber();
+		public abstract void compress(ByteBuffer org, byte[] ref_data, OutputStream dst);
 		public abstract byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) throws IOException;
 	}
 
 	protected static class UncompressedMethod extends CompressionMethod {
-		public ByteBuffer compress(ByteBuffer org, byte[] ref_data) {return org;}
+		public int methodNumber() {return METHOD_UNCOMPRESSED;}
+
+		public void compress(ByteBuffer org, byte[] ref_data, OutputStream dst) {
+			try {
+				WritableByteChannel channel = Channels.newChannel(dst);
+				channel.write(org);
+			} catch (IOException ioe) {throw new RuntimeException(ioe);}
+		}
 		public byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) {return toByteArray(org);}
 	}
 
 	protected static class ChunkedDeflateMethod extends CompressionMethod {
-		public ByteBuffer compress(ByteBuffer org, byte[] ref_data) throws IOException {
-			return null; //TODO
+		public int methodNumber() {return METHOD_CHUNKED_DEFLATE;}
+
+		private static final int CHUNK_METHOD_DEFLATE = 0;
+		private static final int CHUNK_METHOD_PREFIX_COPY = 1;
+		private static final int CHUNK_METHOD_OFFSET_COPY = 2;
+
+		public void compress(ByteBuffer org, byte[] ref_data, OutputStream dst) {
+			//TODO
 		}
 
 		public byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) throws IOException {
@@ -129,22 +189,47 @@ public class DeltaZip {
 				System.err.println("DB| uncompress: remaining="+org.remaining());
 				// Parse chunk header:
 				int meth = org.get();
-				int comp_data_size = org.getChar(); // unsigned short
-				int rskip_spec = meth & 7;
-				if ((meth &~ 7) != 0) throw new IOException("Invalid chunk encoding: "+meth);
+				int meth_major = meth >> 3;
+				switch (meth_major) {
+				case CHUNK_METHOD_DEFLATE: {
+					int rskip_spec = meth & 7;
+					int comp_data_size = org.getChar(); // unsigned short
 
-				// Determine and set dictionary:
-				int rskip = spec_to_rskip(rskip_spec);
-				ref_data_offset += rskip;
-				int dict_size = Math.min(WINDOW_SIZE, ref_data.length-ref_data_offset);
-				//inflater.setDictionary(ref_data, ref_data_offset, dict_size); // Too early when headers are on...
-				Dictionary dict = new Dictionary(ref_data, ref_data_offset, dict_size);
+					// Determine and set dictionary:
+					int rskip = spec_to_rskip(rskip_spec);
+					ref_data_offset += rskip;
+					int dict_size = Math.min(WINDOW_SIZE, ref_data.length-ref_data_offset);
+					Dictionary dict = new Dictionary(ref_data, ref_data_offset, dict_size);
 
-				// Inflate:
-				int before = baos.size();
-				inflate(inflater, org, comp_data_size, baos, dict);
-				int after = baos.size();
-				System.err.println("DB| inflated "+comp_data_size+" to "+(after-before));
+					// Inflate:
+					int before = baos.size();
+					inflate(inflater, org, comp_data_size, baos, dict);
+					int after = baos.size();
+					System.err.println("DB| inflated "+comp_data_size+" to "+(after-before));
+				} break;
+				case CHUNK_METHOD_PREFIX_COPY: {
+					if ((meth & 7) != 0) throw new IOException("Invalid chunk encoding: "+meth);
+					int comp_data_size = org.getChar(); // unsigned short
+					if (comp_data_size != 2) throw new IOException("Invalid chunk length: "+comp_data_size);
+
+					int copy_length = 1 + org.getChar(); // unsigned short
+					baos.write(ref_data, ref_data_offset, copy_length);
+					ref_data_offset += copy_length;
+				} break;
+				case CHUNK_METHOD_OFFSET_COPY: {
+					if ((meth & 7) != 0) throw new IOException("Invalid chunk encoding: "+meth);
+					int comp_data_size = org.getChar(); // unsigned short
+					if (comp_data_size != 4) throw new IOException("Invalid chunk length: "+comp_data_size);
+
+					int offset      = 1 + org.getChar(); // unsigned short
+					int copy_length = 1 + org.getChar(); // unsigned short
+					ref_data_offset += offset;
+					baos.write(ref_data, ref_data_offset, copy_length);
+					ref_data_offset += copy_length;
+				} break;
+				default:
+					throw new IOException("Invalid chunk encoding: "+meth);
+				}//switch
 			}
 			return baos.toByteArray();
 		}
@@ -185,11 +270,46 @@ public class DeltaZip {
 		}
 	}
 
-	//======================================================================
+	protected static class ExtByteArrayOutputStream extends ByteArrayOutputStream {
+		public int insertBlank(int len) {
+			int pos = count;
+			for (int i=0; i<len; i++) write(0);
+			return pos;
+		}
+
+		public void fillBlank(int pos, byte[] data) {
+			for (int i=0; i<data.length; i++) {
+				buf[pos+i] = data[i];
+			}
+		}
+
+		public void fillBlankWithBigEndianInteger(int pos, int value, int len) {
+			if (len>4) throw new IllegalArgumentException("length is > 4");
+			for (int i=len-1; i>=0; i--) {
+				buf[pos++] = (byte) (value >> (8*i));
+			}
+		}
+	}
+
+	//==================== Interface types ==============================
 
 	public interface Access {
 		long getSize();
 		ByteBuffer pread(long offset, long size);
+	}
+
+	public final class AppendSpecification {
+		final long prefix_size;
+		final ByteBuffer new_tail;
+
+		public AppendSpecification(long prefix_size, ByteBuffer new_tail) {
+			this.prefix_size = prefix_size;
+			this.new_tail = new_tail.asReadOnlyBuffer();
+		}
+
+		public AppendSpecification(long prefix_size, byte[] new_tail) {
+			this(prefix_size, ByteBuffer.wrap(new_tail));
+		}
 	}
 
 }
