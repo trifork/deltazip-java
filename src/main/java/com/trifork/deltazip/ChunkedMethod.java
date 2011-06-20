@@ -56,7 +56,7 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 				int rskip_spec = meth & 7;
 				int comp_data_size = org.getChar(); // unsigned short
 
-				// Determine and set dictionary:
+				// Determine dictionary:
 				int rskip = spec_to_rskip(rskip_spec);
 				ref_data_offset += rskip;
 				int dict_size = Math.min(WINDOW_SIZE, ref_data.length-ref_data_offset);
@@ -100,6 +100,7 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 		try {
 			ArrayList<ChunkOption> chunk_options = new ArrayList<ChunkOption>();
 			DataOutputStream dos = new DataOutputStream(dst);
+			Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION, true);
 
 			int ref_data_offset = 0;
 			while (org.hasRemaining()) {
@@ -107,12 +108,21 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 				System.err.println("DB| Remaining: ("+org.remaining()+","+(ref_data.length - ref_data_offset)+")");
 				chunk_options.clear();
 
+				// Generate chunk options:
 				int save_pos = org.position();
 				addIfApplicable(chunk_options, PrefixChunkOption.create(org, ref_data, ref_data_offset));
 				org.position(save_pos);
 				addIfApplicable(chunk_options, SuffixChunkOption.create(org, ref_data, ref_data_offset));
 				org.position(save_pos);
+				for (int dsize_spec=-1; dsize_spec<3; dsize_spec++)
+					for (int rskip_spec=0; rskip_spec<4; rskip_spec++) {
+						addIfApplicable(chunk_options,
+										DeflateChunkOption.create(org, ref_data, ref_data_offset,
+																  rskip_spec, dsize_spec, deflater));
+						org.position(save_pos);
+					}
 
+				// Evaluate chunk options:
 				ChunkOption chunk_option = findBestCandidate(chunk_options);
 				chunk_option.write(dos);
 
@@ -253,7 +263,49 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 	} // Class SuffixChunkOption
 
 	//========== DeflateChunkOption ====================
-	//TODO
+	static class DeflateChunkOption extends ChunkOption {
+		public static DeflateChunkOption create(ByteBuffer data, byte[] ref_data, int ref_data_offset,
+												int rskip_spec, int dsize_spec, Deflater deflater)
+		{
+			int remaining_data = data.remaining();
+			int remaining_ref = ref_data.length - ref_data_offset;
+			boolean all_is_visible =
+				remaining_data <= WINDOW_SIZE &&
+				remaining_ref  <= WINDOW_SIZE;
+
+			// If all is visible, try only total dsize:
+			if (all_is_visible && dsize_spec != -1) return null;
+			
+			int uncomp_size = spec_to_dsize(dsize_spec, data.remaining());
+
+			// Determine dictionary:
+			int rskip = Math.min(spec_to_rskip(rskip_spec), remaining_ref);
+			ref_data_offset += rskip;
+			int dict_size = Math.min(WINDOW_SIZE, ref_data.length-ref_data_offset);
+			Dictionary dict = new Dictionary(ref_data, ref_data_offset, dict_size);
+
+			// Deflate:
+			byte[] comp_data = deflate(deflater, data, uncomp_size, dict);
+
+			return new DeflateChunkOption(rskip_spec, comp_data, uncomp_size);
+		}
+
+		//----------
+		final int rskip_spec;
+		byte[] comp_data;
+		public DeflateChunkOption(int rskip_spec, byte[] comp_data, int uncomp_size) {
+			super(comp_data.length, uncomp_size, spec_to_rskip(rskip_spec));
+			this.rskip_spec = rskip_spec;
+			this.comp_data = comp_data;
+		}
+
+		public int chunkMethod() {return (CHUNK_METHOD_DEFLATE << 3) | rskip_spec;}
+
+		public void writeCompData(DataOutputStream dos) throws IOException {
+			dos.write(comp_data);
+		}
+
+	}
 
 	//==================== Common helpers =======================================
 
@@ -261,17 +313,51 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 		return rskip_spec * (CHUNK_SIZE / 2);
 	}
 
-	protected static void inflate(Inflater inflater, ByteBuffer src, int comp_length, OutputStream dst, Dictionary dict) throws IOException {
-		InflaterOutputStream ios = new InflaterOutputStream(dst, inflater);
-		WritableByteChannel channel = Channels.newChannel(ios);
+	public static int spec_to_dsize(int dsize_spec, int total_dsize) {
+		if (dsize_spec == -1) return total_dsize;
+		else return (2+dsize_spec) * (CHUNK_SIZE / 2);
+	}
 
-		ByteBuffer src2 = src.duplicate();
-		src2.limit(src2.position() + comp_length);
-		src.position(src.position() + comp_length);
+
+	protected static void inflate(Inflater inflater, ByteBuffer src, int comp_length, OutputStream dst, Dictionary dict) throws IOException {
+		inflater.reset();
+		InflaterOutputStream zos = new InflaterOutputStream(dst, inflater);
+		WritableByteChannel channel = Channels.newChannel(zos);
+
+		ByteBuffer src2 = takeStart(src, comp_length);
 
 		inflater.setDictionary(dict.data, dict.off, dict.len);
-		channel.write(src2);
-		ios.finish();
+		while (src2.hasRemaining()) channel.write(src2);
+		zos.finish();
+	}
+
+	protected static byte[] deflate(Deflater deflater, ByteBuffer src, int uncomp_length, Dictionary dict) {
+		ByteArrayOutputStream baos = new ByteArrayOutputStream();
+		try {
+			deflate(deflater, src, uncomp_length, baos, dict);
+			baos.close();
+		} catch (IOException ioe) {throw new RuntimeException(ioe);}
+		return baos.toByteArray();
+	}
+
+	protected static void deflate(Deflater deflater, ByteBuffer src, int uncomp_length, ByteArrayOutputStream dst, Dictionary dict) throws IOException {
+		deflater.reset();
+		DeflaterOutputStream zos = new DeflaterOutputStream(dst, deflater);
+		WritableByteChannel channel = Channels.newChannel(zos);
+
+		ByteBuffer src2 = takeStart(src, uncomp_length);
+
+		deflater.setDictionary(dict.data, dict.off, dict.len);
+		while (src2.hasRemaining()) channel.write(src2);
+		zos.finish();
+	}
+
+	/** Create a ByteBuffer which contains the 'length' first bytes of 'org'. Advance 'org' with 'length' bytes. */
+	protected static ByteBuffer takeStart(ByteBuffer org, int length) {
+		ByteBuffer res = org.duplicate();
+		res.limit(res.position() + length);
+		org.position(org.position() + length);
+		return res;
 	}
 
 	private static class Dictionary {

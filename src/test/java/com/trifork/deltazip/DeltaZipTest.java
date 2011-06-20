@@ -73,7 +73,7 @@ public class DeltaZipTest {
 		test_add_get_with(file0, rev1,rev2); // Would use 'prefix-copy' chunk.
 		test_add_get_with(file0, rev1a,rev2); // Would use 'offset-copy' chunk.
 		test_add_get_with(file0, rev1b,rev2); // Would use 'prefix-copy' and 'offset-copy'.
-		//test_add_get_with(file0, rev2,rev1); // Would use 'deflate' chunk.
+		test_add_get_with(file0, rev2,rev1); // Would use 'deflate' chunk.
 	}
 	
 	public void test_add_get_with(byte[] file0, ByteBuffer rev1, ByteBuffer rev2) throws IOException {
