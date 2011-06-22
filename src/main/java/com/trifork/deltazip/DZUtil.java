@@ -45,6 +45,11 @@ public abstract class DZUtil {
 			this.file = new RandomAccessFile(f, "r").getChannel();
 		}
 
+		public FileAccess(File f, boolean write) throws IOException {
+			String mode = write? "rw":"r";
+			this.file = new RandomAccessFile(f, mode).getChannel();
+		}
+
 		public void close() throws IOException {
 			file.close();
 		}

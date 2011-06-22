@@ -1,5 +1,6 @@
 package com.trifork.deltazip;
 
+import java.util.Iterator;
 import java.util.zip.Inflater;
 import java.util.zip.InflaterOutputStream;
 
@@ -85,6 +86,25 @@ public class DeltaZip {
 		pack_uncompressed(new_version, baos);
 
 		new_version.position(save_pos); // Restore as-was.
+		return new AppendSpecification(current_pos, baos.toByteArray());
+	}
+
+	/** Computes an AppendSpecification for adding a version.
+	 *  Has the side effect of placing the cursor at the end.
+	 */
+	public AppendSpecification add(Iterator<ByteBuffer> versions_to_add) throws IOException {
+		set_cursor_at_end();
+		ExtByteArrayOutputStream baos = new ExtByteArrayOutputStream();
+		ByteBuffer prev_version = get();
+
+		while (versions_to_add.hasNext()) {
+			ByteBuffer cur = versions_to_add.next();
+			if (prev_version != null) pack_compressed(prev_version, allToByteArray(cur), baos);
+			prev_version = cur;
+		}
+
+		pack_uncompressed(prev_version, baos);
+
 		return new AppendSpecification(current_pos, baos.toByteArray());
 	}
 
