@@ -6,8 +6,9 @@ import java.io.File;
 import java.io.RandomAccessFile;
 
 import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
 import java.nio.channels.Channels;
+import java.nio.channels.WritableByteChannel;
+import java.nio.channels.FileChannel;
 
 public abstract class DZUtil {
 	public static class ByteArrayAccess implements DeltaZip.Access {
@@ -38,25 +39,45 @@ public abstract class DZUtil {
 
 
 	public static class FileAccess {
-		private final RandomAccessFile file;
+		private final FileChannel file;
 
 		public FileAccess(File f) throws IOException {
-			this.file = new RandomAccessFile(f, "r");
+			this.file = new RandomAccessFile(f, "r").getChannel();
+		}
+
+		public void close() throws IOException {
+			file.close();
 		}
 
 		public long getSize() throws IOException {
-			return file.length();
+			return file.size();
 		}
 
 		public ByteBuffer pread(long pos, int len) throws IOException {
 // 			System.err.println("DB| pread("+pos+","+len+") of "+file);
-			byte[] buf = new byte [len];
-			file.seek(pos);
-			file.read(buf);
+			ByteBuffer res = ByteBuffer.allocate(len);
+			while (res.hasRemaining()) {
+				int r  = file.read(res, pos);
+				if (r<0) throw new IOException("End of file reached");
+				pos += r;
+			}
 			
-			return ByteBuffer.wrap(buf).asReadOnlyBuffer();
+			return res;
 		}
 		
+		public void applyAppendSpec(DeltaZip.AppendSpecification spec) throws IOException {
+			long pos = spec.prefix_size;
+			ByteBuffer tail = spec.new_tail;
+			long total_length = (spec.prefix_size + tail.remaining());
+
+			while (tail.hasRemaining()) {
+				int w = file.write(tail, pos);
+				pos += w;
+			}
+			if (pos != total_length) throw new IOException("Internal error");
+			file.truncate(pos);
+		}
+
 	}
 }
 
