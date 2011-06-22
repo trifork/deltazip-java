@@ -95,7 +95,7 @@ public class DeltaZip {
 		if (hasPrevious()) previous();
 	}
 
-	protected void set_initial_position() {
+	protected void set_initial_position() throws IOException {
 		current_pos = access.getSize();
 	}
 
@@ -190,8 +190,8 @@ public class DeltaZip {
 	//==================== Interface types ==============================
 
 	public interface Access {
-		long getSize();
-		ByteBuffer pread(long offset, long size);
+		long getSize() throws IOException;
+		ByteBuffer pread(long offset, int size) throws IOException;
 	}
 
 	public final class AppendSpecification {
