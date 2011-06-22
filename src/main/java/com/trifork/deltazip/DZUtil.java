@@ -38,7 +38,7 @@ public abstract class DZUtil {
 	}
 
 
-	public static class FileAccess {
+	public static class FileAccess implements DeltaZip.Access {
 		private final FileChannel file;
 
 		public FileAccess(File f) throws IOException {

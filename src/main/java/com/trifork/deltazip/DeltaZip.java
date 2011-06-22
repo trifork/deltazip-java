@@ -80,7 +80,7 @@ public class DeltaZip {
 		ExtByteArrayOutputStream baos = new ExtByteArrayOutputStream();
 		ByteBuffer last_version = get();
 		if (last_version != null) {
-			pack_compressed(last_version, toByteArray(new_version), baos);
+			pack_compressed(last_version, allToByteArray(new_version), baos);
 		}
 		pack_uncompressed(new_version, baos);
 
@@ -153,8 +153,16 @@ public class DeltaZip {
 		public abstract byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) throws IOException;
 	}
 
-	public static byte[] toByteArray(ByteBuffer org) {
-		if (org.hasArray()) return org.array();
+	public static byte[] allToByteArray(ByteBuffer org) {
+		int save_pos = org.position();
+		org.position(0);
+		byte[] buf = remainingToByteArray(org);
+		org.position(save_pos);
+
+		return buf;
+	}
+
+	public static byte[] remainingToByteArray(ByteBuffer org) {
 		byte[] buf = new byte[org.remaining()];
 		org.get(buf);
 		return buf;

@@ -47,10 +47,11 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 
 		int ref_data_offset = 0;
 		while (org.hasRemaining()) {
-			System.err.println("DB| uncompress: remaining="+org.remaining());
+// 			System.err.println("DB| uncompress: remaining="+org.remaining());
 			// Parse chunk header:
 			int meth = org.get();
 			int meth_major = meth >> 3;
+// 			System.err.println("DB| uncompress: method="+meth);
 			switch (meth_major) {
 			case CHUNK_METHOD_DEFLATE: {
 				int rskip_spec = meth & 7;
@@ -66,7 +67,7 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 				int before = baos.size();
 				inflate(inflater, org, comp_data_size, baos, dict);
 				int after = baos.size();
-				System.err.println("DB| inflated "+comp_data_size+" to "+(after-before));
+// 				System.err.println("DB| inflated "+comp_data_size+" to "+(after-before));
 			} break;
 			case CHUNK_METHOD_PREFIX_COPY: {
 				if ((meth & 7) != 0) throw new IOException("Invalid chunk encoding: "+meth);

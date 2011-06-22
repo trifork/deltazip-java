@@ -21,8 +21,9 @@ class UncompressedMethod extends DeltaZip.CompressionMethod {
 			channel.write(org);
 		} catch (IOException ioe) {throw new RuntimeException(ioe);}
 	}
+
 	public byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) {
-		return DeltaZip.toByteArray(org);
+		return DeltaZip.remainingToByteArray(org);
 	}
 }
 
