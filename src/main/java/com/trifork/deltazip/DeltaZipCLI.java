@@ -89,33 +89,34 @@ public abstract class DeltaZipCLI {
 
 		// Possible race condition here. Can't do anything about it I think.
 		FileAccess fa = new FileAccess(dzfile, true);
+		add_to_file(fa, createFileIterator(args, 2));
+		fa.close();
+	}
+
+	public static void do_add(String[] args) throws IOException {
+		if (args.length < 2) {usage(); System.exit(1);}
+		String filename = args[1];
+		FileAccess fa = openDZFile(filename, true, false);
+		add_to_file(fa, createFileIterator(args, 2));
+		fa.close();
+	}
+
+	protected static void add_to_file(FileAccess fa, Iterator<ByteBuffer> to_add) throws IOException {
 		DeltaZip dz = new DeltaZip(fa);
-		
-		Iterator<ByteBuffer> it = new Iterator<ByteBuffer>() {
-			int arg_pos = 2;
-			public boolean hasNext() {return arg_pos < args.length;}
-			public ByteBuffer next() {
-				String filename = args[arg_pos++];
-				try {
-					return fileToByteBuffer(filename);
-				} catch (IOException ioe) {
-					throw new RuntimeException(ioe);
-				}
-			}
-			public void remove() {throw new UnsupportedOperationException();}
-		};
-		
-		AppendSpecification app_spec = dz.add(it);
+		AppendSpecification app_spec = dz.add(to_add);
 		fa.applyAppendSpec(app_spec);
 	}
 
-	public static void do_add(String[] args) throws IOException { /*TODO*/ }
 
 	//======================================================================
 	private static FileAccess openDZFile(String filename) throws IOException {
+		return openDZFile(filename, false, false);
+	}
+
+	private static FileAccess openDZFile(String filename, boolean writable, boolean create) throws IOException {
 		File dzfile = new File(filename);
-		checkExistence(dzfile);
-		return new FileAccess(dzfile);
+		if (!create) checkExistence(dzfile);
+		return new FileAccess(dzfile, writable);
 	}
 
 	private static void checkExistence(File file) {
@@ -138,6 +139,24 @@ public abstract class DeltaZipCLI {
 		} finally {
 			in.close();
 		}
+	}
+
+	protected static Iterator<ByteBuffer> createFileIterator(final String[] filenames, final int start_index) {
+		return new Iterator<ByteBuffer>() {
+			int pos = start_index;
+
+			public boolean hasNext() {return pos < filenames.length;}
+
+			public ByteBuffer next() {
+				String filename = filenames[pos++];
+				try {
+					return fileToByteBuffer(filename);
+				} catch (IOException ioe) {
+					throw new RuntimeException(ioe);
+				}
+			}
+			public void remove() {throw new UnsupportedOperationException();}
+		};
 	}
 
 }
