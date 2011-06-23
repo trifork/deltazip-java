@@ -108,6 +108,15 @@ public abstract class DZUtil {
 		}
 	}
 
+	public static byte[] inflate(Inflater inflater, ByteBuffer src, int uncomp_length, Dictionary dict) {
+		ByteArrayOutputStream baos = new ByteArrayOutputStream();
+		try {
+			inflate(inflater, src, uncomp_length, baos, dict);
+			baos.close();
+		} catch (IOException ioe) {throw new RuntimeException(ioe);}
+		return baos.toByteArray();
+	}
+
 	public static void inflate(Inflater inflater, ByteBuffer src, int comp_length, OutputStream dst, Dictionary dict) throws IOException {
 		inflater.reset();
 		InflaterOutputStream zos = new InflaterOutputStream(dst, inflater);
@@ -129,7 +138,7 @@ public abstract class DZUtil {
 		return baos.toByteArray();
 	}
 
-	public static void deflate(Deflater deflater, ByteBuffer src, int uncomp_length, ByteArrayOutputStream dst, Dictionary dict) throws IOException {
+	public static void deflate(Deflater deflater, ByteBuffer src, int uncomp_length, OutputStream dst, Dictionary dict) throws IOException {
 		deflater.reset();
 		DeflaterOutputStream zos = new DeflaterOutputStream(dst, deflater);
 		WritableByteChannel channel = Channels.newChannel(zos);

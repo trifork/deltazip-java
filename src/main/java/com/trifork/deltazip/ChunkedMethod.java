@@ -33,13 +33,12 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 	 */
 	private static final int LIMIT_SO_DEFLATED_FITS_IN_64KB = 65000;
 
-	//==================== API fulfillment ==============================
-	public int methodNumber() {return DeltaZip.METHOD_CHUNKED;}
-
 	private static final int CHUNK_METHOD_DEFLATE = 0;
 	private static final int CHUNK_METHOD_PREFIX_COPY = 1;
 	private static final int CHUNK_METHOD_OFFSET_COPY = 2;
 
+	//==================== API fulfillment ==============================
+	public int methodNumber() {return DeltaZip.METHOD_CHUNKED;}
 
 	//==================== Uncompression: ========================================
 	public byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) throws IOException {

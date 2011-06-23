@@ -185,7 +185,12 @@ public class DeltaZip {
 	protected void pack_entry(ByteBuffer version, byte[] ref_version, CompressionMethod cm, ExtByteArrayOutputStream dst) {
 		int tag_blank = dst.insertBlank(4);
 		int size_before = dst.size();
-		cm.compress(version.duplicate(), ref_version, dst);
+		try {
+			cm.compress(version.duplicate(), ref_version, dst);
+		} catch (IOException ioe) {
+			// Shouldn't happen; it's a ByteArrayOutputStream.
+			throw new RuntimeException(ioe);
+		}
 		int size_after = dst.size();
 		int length = size_after - size_before;
 
@@ -198,7 +203,7 @@ public class DeltaZip {
 	//==================== Compression methods =============================
 	protected static abstract class CompressionMethod {
 		public abstract int methodNumber();
-		public abstract void compress(ByteBuffer org, byte[] ref_data, OutputStream dst);
+		public abstract void compress(ByteBuffer org, byte[] ref_data, OutputStream dst) throws IOException;
 		public abstract byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) throws IOException;
 	}
 
