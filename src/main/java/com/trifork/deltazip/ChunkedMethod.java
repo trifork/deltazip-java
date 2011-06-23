@@ -3,9 +3,7 @@ package com.trifork.deltazip;
 import java.util.ArrayList;
 
 import java.util.zip.Deflater;
-import java.util.zip.DeflaterOutputStream;
 import java.util.zip.Inflater;
-import java.util.zip.InflaterOutputStream;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -16,6 +14,8 @@ import java.nio.ByteBuffer;
 
 import java.nio.channels.WritableByteChannel;
 import java.nio.channels.Channels;
+
+import com.trifork.deltazip.DZUtil.Dictionary;
 
 class ChunkedMethod extends DeltaZip.CompressionMethod {
 	//==================== Constants =======================================
@@ -65,7 +65,7 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 
 				// Inflate:
 				int before = baos.size();
-				inflate(inflater, org, comp_data_size, baos, dict);
+				DZUtil.inflate(inflater, org, comp_data_size, baos, dict);
 				int after = baos.size();
 // 				System.err.println("DB| inflated "+comp_data_size+" to "+(after-before));
 			} break;
@@ -286,7 +286,7 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 			Dictionary dict = new Dictionary(ref_data, ref_data_offset, dict_size);
 
 			// Deflate:
-			byte[] comp_data = deflate(deflater, data, uncomp_size, dict);
+			byte[] comp_data = DZUtil.deflate(deflater, data, uncomp_size, dict);
 
 			return new DeflateChunkOption(rskip_spec, comp_data, uncomp_size);
 		}
@@ -317,59 +317,6 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 	public static int spec_to_dsize(int dsize_spec, int total_dsize) {
 		if (dsize_spec == -1) return total_dsize;
 		else return (2+dsize_spec) * (CHUNK_SIZE / 2);
-	}
-
-
-	protected static void inflate(Inflater inflater, ByteBuffer src, int comp_length, OutputStream dst, Dictionary dict) throws IOException {
-		inflater.reset();
-		InflaterOutputStream zos = new InflaterOutputStream(dst, inflater);
-		WritableByteChannel channel = Channels.newChannel(zos);
-
-		ByteBuffer src2 = takeStart(src, comp_length);
-
-		inflater.setDictionary(dict.data, dict.off, dict.len);
-		while (src2.hasRemaining()) channel.write(src2);
-		zos.finish();
-	}
-
-	protected static byte[] deflate(Deflater deflater, ByteBuffer src, int uncomp_length, Dictionary dict) {
-		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		try {
-			deflate(deflater, src, uncomp_length, baos, dict);
-			baos.close();
-		} catch (IOException ioe) {throw new RuntimeException(ioe);}
-		return baos.toByteArray();
-	}
-
-	protected static void deflate(Deflater deflater, ByteBuffer src, int uncomp_length, ByteArrayOutputStream dst, Dictionary dict) throws IOException {
-		deflater.reset();
-		DeflaterOutputStream zos = new DeflaterOutputStream(dst, deflater);
-		WritableByteChannel channel = Channels.newChannel(zos);
-
-		ByteBuffer src2 = takeStart(src, uncomp_length);
-
-		deflater.setDictionary(dict.data, dict.off, dict.len);
-		while (src2.hasRemaining()) channel.write(src2);
-		zos.finish();
-	}
-
-	/** Create a ByteBuffer which contains the 'length' first bytes of 'org'. Advance 'org' with 'length' bytes. */
-	protected static ByteBuffer takeStart(ByteBuffer org, int length) {
-		ByteBuffer res = org.duplicate();
-		res.limit(res.position() + length);
-		org.position(org.position() + length);
-		return res;
-	}
-
-	private static class Dictionary {
-		final byte[] data;
-		final int off, len;
-		
-		public Dictionary(byte[] data, int off, int len) {
-			this.data = data;
-			this.off = off;
-			this.len = len;
-		}
 	}
 
 }// class ChunkedMethod

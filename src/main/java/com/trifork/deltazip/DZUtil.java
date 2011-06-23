@@ -10,6 +10,13 @@ import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 import java.nio.channels.FileChannel;
 
+import java.util.zip.Deflater;
+import java.util.zip.DeflaterOutputStream;
+import java.util.zip.Inflater;
+import java.util.zip.InflaterOutputStream;
+
+import java.io.OutputStream;
+
 public abstract class DZUtil {
 	public static class ByteArrayAccess implements DeltaZip.Access {
 		private final byte[] data;
@@ -87,5 +94,60 @@ public abstract class DZUtil {
 		}
 
 	}
+
+	//==================== Deflate / Inflate ====================
+
+	public static class Dictionary {
+		final byte[] data;
+		final int off, len;
+		
+		public Dictionary(byte[] data, int off, int len) {
+			this.data = data;
+			this.off = off;
+			this.len = len;
+		}
+	}
+
+	public static void inflate(Inflater inflater, ByteBuffer src, int comp_length, OutputStream dst, Dictionary dict) throws IOException {
+		inflater.reset();
+		InflaterOutputStream zos = new InflaterOutputStream(dst, inflater);
+		WritableByteChannel channel = Channels.newChannel(zos);
+
+		ByteBuffer src2 = takeStart(src, comp_length);
+
+		if (dict != null) inflater.setDictionary(dict.data, dict.off, dict.len);
+		while (src2.hasRemaining()) channel.write(src2);
+		zos.finish();
+	}
+
+	public static byte[] deflate(Deflater deflater, ByteBuffer src, int uncomp_length, Dictionary dict) {
+		ByteArrayOutputStream baos = new ByteArrayOutputStream();
+		try {
+			deflate(deflater, src, uncomp_length, baos, dict);
+			baos.close();
+		} catch (IOException ioe) {throw new RuntimeException(ioe);}
+		return baos.toByteArray();
+	}
+
+	public static void deflate(Deflater deflater, ByteBuffer src, int uncomp_length, ByteArrayOutputStream dst, Dictionary dict) throws IOException {
+		deflater.reset();
+		DeflaterOutputStream zos = new DeflaterOutputStream(dst, deflater);
+		WritableByteChannel channel = Channels.newChannel(zos);
+
+		ByteBuffer src2 = takeStart(src, uncomp_length);
+
+		if (dict != null) deflater.setDictionary(dict.data, dict.off, dict.len);
+		while (src2.hasRemaining()) channel.write(src2);
+		zos.finish();
+	}
+
+	/** Create a ByteBuffer which contains the 'length' first bytes of 'org'. Advance 'org' with 'length' bytes. */
+	public static ByteBuffer takeStart(ByteBuffer org, int length) {
+		ByteBuffer res = org.duplicate();
+		res.limit(res.position() + length);
+		org.position(org.position() + length);
+		return res;
+	}
+
 }
 
