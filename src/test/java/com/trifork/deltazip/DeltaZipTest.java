@@ -24,8 +24,8 @@ public class DeltaZipTest {
 		/** Chunked-deflate, no prefix/suffix. */
 		byte[] two_revs1 = {
 			(byte)0xCE, (byte)0xB4, 0x7A, 0x10,
-			32,0,0,7,0,0,4,(byte)243,
-			0,113,0,32,0,0,7,0,
+			64,0,0,7,0,0,4,(byte)243,
+			0,113,0,64,0,0,7,0,
 			0,0,13,72,101,108,108,111,
 			44,32,87,111,114,108,100,33,
 			0,0,0,13};
@@ -33,8 +33,8 @@ public class DeltaZipTest {
 		/** Chunked-deflate, using prefix. */
 		byte[] two_revs2 = {
 			(byte)0xCE, (byte)0xB4, 0x7A, 0x10,
-			32,0,0,5,8,0,2,0,
-			4,32,0,0,5,0,0,0,
+			64,0,0,5,8,0,2,0,
+			4,64,0,0,5,0,0,0,
 			13,72,101,108,108,111,44,32,
 			87,111,114,108,100,33,0,0,
 			0,13};
