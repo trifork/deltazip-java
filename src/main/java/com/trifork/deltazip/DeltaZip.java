@@ -34,11 +34,13 @@ public class DeltaZip {
 	protected static final CompressionMethod UNCOMPRESSED_INSTANCE = new UncompressedMethod();
 	protected static final CompressionMethod DEFLATED_INSTANCE = new DeflatedMethod();
 	protected static final CompressionMethod CHUNKED_INSTANCE = new ChunkedMethod();
+	protected static final CompressionMethod CHUNKED_MIDDLE_INSTANCE = new ChunkedMiddleMethod();
 	static {
 		COMPRESSION_METHODS = new CompressionMethod[16];
 		insertCM(COMPRESSION_METHODS, UNCOMPRESSED_INSTANCE);
 		insertCM(COMPRESSION_METHODS, DEFLATED_INSTANCE);
 		insertCM(COMPRESSION_METHODS, CHUNKED_INSTANCE);
+		insertCM(COMPRESSION_METHODS, CHUNKED_MIDDLE_INSTANCE);
 	}
 	private static void insertCM(CompressionMethod[] table, CompressionMethod cm) {
 		table[cm.methodNumber()] = cm;
@@ -71,7 +73,7 @@ public class DeltaZip {
 
 	/** Tells whether there are older revisions. */
 	public boolean hasPrevious() {
-		return current_pos > 0;
+		return current_pos > FILE_HEADER_LENGTH;
 	}
 
 	/** Retreat the cursor.
