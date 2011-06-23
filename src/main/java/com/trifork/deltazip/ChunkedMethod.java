@@ -55,6 +55,7 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 			case CHUNK_METHOD_DEFLATE: {
 				int rskip_spec = meth & 7;
 				int comp_data_size = org.getChar(); // unsigned short
+// 				System.err.println("DB| uncompress: Deflating chunk: comp_data_size="+comp_data_size);
 
 				// Determine dictionary:
 				int rskip = spec_to_rskip(rskip_spec);
@@ -164,6 +165,8 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 		}
 
 		public final void write(DataOutputStream dos) throws IOException {
+			if (comp_size != (char)comp_size)
+				throw new RuntimeException("Internal error: chunk too large.");
 			dos.write(chunkMethod());
 			dos.writeChar(comp_size);
 			writeCompData(dos);
@@ -271,6 +274,7 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 			if (all_is_visible && dsize_spec != -1) return null;
 			
 			int uncomp_size = spec_to_dsize(dsize_spec, data.remaining());
+			if (uncomp_size > LIMIT_SO_DEFLATED_FITS_IN_64KB) return null;
 
 			// Determine dictionary:
 			int rskip = Math.min(spec_to_rskip(rskip_spec), remaining_ref);
