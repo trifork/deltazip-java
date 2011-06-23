@@ -3,6 +3,7 @@ package com.trifork.deltazip;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
 
 import java.nio.ByteBuffer;
 
@@ -16,8 +17,24 @@ class ChunkedMiddleMethod extends DeltaZip.CompressionMethod {
 	public int methodNumber() {return DeltaZip.METHOD_CHUNKED_MIDDLE;}
 
 	public byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) throws IOException {
-		
-		return DZUtil.inflate(inflater, org, org.remaining(), null);
+		ByteArrayOutputStream baos = new ByteArrayOutputStream();
+		int prefix_len = varlen_decode(org);
+		int suffix_len = varlen_decode(org);
+
+		// Add prefix:
+		baos.write(ref_data, 0, prefix_len);
+
+		// Add middle:
+		int ref_middle_end = ref_data.length - suffix_len;
+		byte[] ref_middle = Arrays.copyOfRange(ref_data, prefix_len, ref_middle_end);
+		byte[] middle = chunked_method.uncompress(org, ref_middle, inflater);
+		baos.write(middle);
+
+		// Add suffix:
+		baos.write(ref_data, ref_data.length - suffix_len, suffix_len);
+
+		baos.close();
+		return baos.toByteArray();
 	}
 
 	public void compress(ByteBuffer org, byte[] ref_data, OutputStream dst) throws IOException {
@@ -64,13 +81,13 @@ class ChunkedMiddleMethod extends DeltaZip.CompressionMethod {
 		}
 	}
 
-	public static int varlen_decode(InputStream in) throws IOException {
+	public static int varlen_decode(ByteBuffer in) throws IOException {
 		long acc = 0;
 		int bits = 0;
 		boolean more;
 		do {
-			int b = in.read();
-			more = (b >= 0x80);
+			int b = in.get();
+			more = (b < 0);
 			b &= 0x7F;
 			acc = (acc << 7) | (b & 0x7F);
 			bits += 7;

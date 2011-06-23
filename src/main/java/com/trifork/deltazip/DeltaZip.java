@@ -186,7 +186,7 @@ public class DeltaZip {
 	}
 
 	protected void pack_delta(ByteBuffer version, byte[] ref_version, ExtByteArrayOutputStream dst) {
-		pack_entry(version, ref_version, CHUNKED_INSTANCE, dst);
+		pack_entry(version, ref_version, CHUNKED_MIDDLE_INSTANCE, dst);
 	}
 
 	//====================
