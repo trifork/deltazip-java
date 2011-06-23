@@ -19,12 +19,16 @@ public class DeltaZip {
 	public static final int DELTAZIP_MAGIC_HEADER = 0xCEB47A10;
 	public static final int FILE_HEADER_LENGTH = 4;
 
+	// Snapshot methods (0-3):
+	public static final int METHOD_UNCOMPRESSED   = 0;
+	public static final int METHOD_DEFLATED       = 1;
+	// Delta methods (4-15):
+	public static final int METHOD_CHUNKED        = 4;
+	public static final int METHOD_CHUNKED_MIDDLE = 5;
+
+
 	private static final int VERSION_SIZE_BITS = 28;
 	private static final int VERSION_SIZE_LIMIT = 1 << VERSION_SIZE_BITS;
-
-	public static final int METHOD_UNCOMPRESSED = 0;
-	public static final int METHOD_CHUNKED = 2;
-
 
 	protected static final CompressionMethod[] COMPRESSION_METHODS;
 	protected static final CompressionMethod UNCOMPRESSED_INSTANCE = new UncompressedMethod();
