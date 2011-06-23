@@ -23,6 +23,7 @@ public class DeltaZipTest {
 
 		/** Chunked-deflate, no prefix/suffix. */
 		byte[] two_revs1 = {
+			(byte)0xCE, (byte)0xB4, 0x7A, 0x10,
 			32,0,0,7,0,0,4,(byte)243,
 			0,113,0,32,0,0,7,0,
 			0,0,13,72,101,108,108,111,
@@ -31,6 +32,7 @@ public class DeltaZipTest {
 
 		/** Chunked-deflate, using prefix. */
 		byte[] two_revs2 = {
+			(byte)0xCE, (byte)0xB4, 0x7A, 0x10,
 			32,0,0,5,8,0,2,0,
 			4,32,0,0,5,0,0,0,
 			13,72,101,108,108,111,44,32,
@@ -84,7 +86,7 @@ public class DeltaZipTest {
 		ByteArrayAccess access1 = new ByteArrayAccess(file1);
 		DeltaZip dz1 = new DeltaZip(access1);
 		AppendSpecification app2 = dz1.add(rev2);
-		byte[] file2 = access0.applyAppendSpec(app2);
+		byte[] file2 = access1.applyAppendSpec(app2);
 		dump("file2=", file2);
 
 		ByteArrayAccess access2 = new ByteArrayAccess(file2);
@@ -110,14 +112,12 @@ public class DeltaZipTest {
 	//======================================================================
 
 	public static String toString(ByteBuffer buf) {
-		int save_pos = buf.position();
-		String r = new String(DeltaZip.toByteArray(buf));
-		buf.position(save_pos);
+		String r = new String(DeltaZip.allToByteArray(buf.duplicate()));
 		return r;
 	}
 
 	public static void dump(String s, ByteBuffer buf) {
-		dump(s, DeltaZip.toByteArray(buf));
+		dump(s, DeltaZip.allToByteArray(buf.duplicate()));
 	}
 
 	public static void dump(String s, byte[] buf) {

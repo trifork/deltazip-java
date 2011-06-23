@@ -16,11 +16,15 @@ public class DeltaZip {
 
 	//==================== Constants =======================================
 
+	public static final int DELTAZIP_MAGIC_HEADER = 0xCEB47A10;
+	public static final int FILE_HEADER_LENGTH = 4;
+
 	private static final int VERSION_SIZE_BITS = 28;
 	private static final int VERSION_SIZE_LIMIT = 1 << VERSION_SIZE_BITS;
 
 	public static final int METHOD_UNCOMPRESSED = 0;
 	public static final int METHOD_CHUNKED = 2;
+
 
 	protected static final CompressionMethod[] COMPRESSION_METHODS;
 	protected static final CompressionMethod UNCOMPRESSED_INSTANCE = new UncompressedMethod();
@@ -49,6 +53,7 @@ public class DeltaZip {
 	
 	public DeltaZip(Access access) throws IOException {
 		this.access = access;
+		check_magic_header();
 		set_cursor_at_end();
 	}
 
@@ -75,17 +80,19 @@ public class DeltaZip {
 	 *  Has the side effect of placing the cursor at the end.
 	 */
 	public AppendSpecification add(ByteBuffer new_version) throws IOException {
-		int save_pos = new_version.position();
-
 		set_cursor_at_end();
 		ExtByteArrayOutputStream baos = new ExtByteArrayOutputStream();
+
+		// If the file is empty, add a header:
+		if (current_pos==0) baos.writeBigEndianInteger(DELTAZIP_MAGIC_HEADER, 4);
+
 		ByteBuffer last_version = get();
+
 		if (last_version != null) {
 			pack_compressed(last_version, allToByteArray(new_version), baos);
 		}
 		pack_uncompressed(new_version, baos);
 
-		new_version.position(save_pos); // Restore as-was.
 		return new AppendSpecification(current_pos, baos.toByteArray());
 	}
 
@@ -95,6 +102,10 @@ public class DeltaZip {
 	public AppendSpecification add(Iterator<ByteBuffer> versions_to_add) throws IOException {
 		set_cursor_at_end();
 		ExtByteArrayOutputStream baos = new ExtByteArrayOutputStream();
+
+		// If the file is empty, add a header:
+		if (current_pos==0) baos.writeBigEndianInteger(DELTAZIP_MAGIC_HEADER, 4);
+
 		ByteBuffer prev_version = get();
 
 		while (versions_to_add.hasNext()) {
@@ -109,6 +120,20 @@ public class DeltaZip {
 	}
 
 	//==================== Internals =======================================
+
+	protected void check_magic_header() throws IOException {
+		long size = access.getSize();
+		if (size == 0) return; // OK (empty)
+		if (size < FILE_HEADER_LENGTH ||
+			read_magic_header() != DELTAZIP_MAGIC_HEADER)
+			throw new IOException("Not a deltazip file (invalid header)");
+	}
+
+	protected int read_magic_header() throws IOException {
+		ByteBuffer header = access.pread(0,4);
+		int magic = header.getInt(0);
+		return magic;
+	}
 
 	protected void set_cursor_at_end() throws IOException {
 		set_initial_position();
@@ -156,7 +181,7 @@ public class DeltaZip {
 	protected void pack_entry(ByteBuffer version, byte[] ref_version, CompressionMethod cm, ExtByteArrayOutputStream dst) {
 		int tag_blank = dst.insertBlank(4);
 		int size_before = dst.size();
-		cm.compress(version, ref_version, dst);
+		cm.compress(version.duplicate(), ref_version, dst);
 		int size_after = dst.size();
 		int length = size_after - size_before;
 

@@ -25,12 +25,15 @@ public abstract class DZUtil {
 		}
 	
 		public byte[] applyAppendSpec(DeltaZip.AppendSpecification spec) {
+			int pos = (int) spec.prefix_size;
+			ByteBuffer tail = spec.new_tail;
+			int total_length = (int) (spec.prefix_size + tail.remaining());
 			try {
-				int length = (int) (spec.prefix_size + spec.new_tail.remaining());
-				ByteArrayOutputStream baos = new ByteArrayOutputStream(length);
-				baos.write(data);
+				ByteArrayOutputStream baos = new ByteArrayOutputStream(total_length);
+				baos.write(data, 0, pos);
+
 				WritableByteChannel channel = Channels.newChannel(baos);
-				channel.write(spec.new_tail);
+				channel.write(tail);
 				channel.close();
 				return baos.toByteArray();
 			} catch (IOException ioe) {throw new RuntimeException(ioe);}
@@ -73,7 +76,7 @@ public abstract class DZUtil {
 		public void applyAppendSpec(DeltaZip.AppendSpecification spec) throws IOException {
 			long pos = spec.prefix_size;
 			ByteBuffer tail = spec.new_tail;
-			long total_length = (spec.prefix_size + tail.remaining());
+			long total_length = spec.prefix_size + tail.remaining();
 
 			while (tail.hasRemaining()) {
 				int w = file.write(tail, pos);
