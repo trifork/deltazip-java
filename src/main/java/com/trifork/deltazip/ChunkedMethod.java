@@ -104,8 +104,6 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 
 			int ref_data_offset = 0;
 			while (org.hasRemaining()) {
-				System.err.println("DB| Chunking from ("+org.position()+","+ref_data_offset+")");
-				System.err.println("DB| Remaining: ("+org.remaining()+","+(ref_data.length - ref_data_offset)+")");
 				chunk_options.clear();
 
 				// Generate chunk options:
@@ -146,7 +144,7 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 				best_ratio = candidate_ratio;
 			}
 		}
-		System.err.println("DB| choosing chunk option "+best_candidate+" with ratio "+best_ratio);
+// 		System.err.println("DB| choosing chunk option "+best_candidate+" with ratio "+best_ratio);
 		return best_candidate;
 	}
 
@@ -186,10 +184,6 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 			int limit = Math.min(SIZE_LIMIT,
 								 Math.min(data.remaining(), ref_data.length - ref_data_offset));
 			int i = 0;
-			if (limit>0) {
-				System.err.println("PrefixChunkOption.create(): first data byte is "+data.get(start_pos));
-				System.err.println("PrefixChunkOption.create(): first ref byte is "+ref_data[ref_data_offset]);
-			}
 			while (i < limit &&
 				   data.get(start_pos + i) == ref_data[ref_data_offset + i]) {
 				i++;
