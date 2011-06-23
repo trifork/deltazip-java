@@ -309,7 +309,7 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 
 	public static int spec_to_dsize(int dsize_spec, int total_dsize) {
 		if (dsize_spec == -1) return total_dsize;
-		else return (2+dsize_spec) * (CHUNK_SIZE / 2);
+		else return Math.min((2+dsize_spec) * (CHUNK_SIZE / 2), total_dsize);
 	}
 
 }// class ChunkedMethod
