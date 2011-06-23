@@ -171,7 +171,7 @@ public class DeltaZipTest {
 				for (int j=0; j<nRuns; j++) {
 					int start = 0, end = tmp.length;
 					int iters = rnd.nextInt(10);
-					for (int k=0; k<iters; k++) { // Select part.
+					for (int k=0; k<iters && start<end; k++) { // Select part.
 						int mid = start + rnd.nextInt(end - start);
 						if (rnd.nextBoolean()) start=mid; else end=mid;
 					}
