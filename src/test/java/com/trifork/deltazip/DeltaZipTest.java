@@ -4,6 +4,7 @@ import java.nio.ByteBuffer;
 import java.io.IOException;
 import com.trifork.deltazip.DeltaZip.AppendSpecification;
 import com.trifork.deltazip.DZUtil.ByteArrayAccess;
+import java.util.Random;
 
 import org.junit.Test;
 import static junit.framework.Assert.*;
@@ -109,6 +110,39 @@ public class DeltaZipTest {
 		} catch (Exception e) {}
 	}
 
+	@Test
+	public void totally_random_test() throws IOException {
+		final Random rnd = new Random();
+		byte[] file = new byte[0];
+
+		// Create versions:
+		ByteBuffer[] versions = new ByteBuffer[100];
+		for (int i=0; i<versions.length; i++)
+			versions[i] = createRandomBinary(1000, rnd);
+
+		// Add versions:
+		for (int i=0; i<100; i++) {
+			ByteArrayAccess access = new ByteArrayAccess(file);
+			DeltaZip dz = new DeltaZip(access);
+			AppendSpecification app_spec =
+				dz.add(versions[i]);
+			file = access.applyAppendSpec(app_spec);
+		}
+
+		{// Verify contents:
+			ByteArrayAccess access = new ByteArrayAccess(file);
+			DeltaZip dz = new DeltaZip(access);
+			for (int i=versions.length-1; i>=0; i--) {
+				assertEquals(dz.get(), versions[i]);
+				if (i>0) {
+					assert(dz.hasPrevious());
+					dz.previous();
+				}
+			}
+			assert(! dz.hasPrevious());
+		}
+	}
+
 	//======================================================================
 
 	public static String toString(ByteBuffer buf) {
@@ -128,5 +162,11 @@ public class DeltaZipTest {
 			System.err.print(buf[i] & 0xff);
 		}
 		System.err.println(">>");
+	}
+
+	public static ByteBuffer createRandomBinary(int length, Random rnd) {
+		byte[] buf = new byte[length];
+		rnd.nextBytes(buf);
+		return ByteBuffer.wrap(buf).asReadOnlyBuffer();
 	}
 }
