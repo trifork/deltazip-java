@@ -73,26 +73,32 @@ class ChunkedMiddleMethod extends DeltaZip.CompressionMethod {
 
 	public static void varlen_encode(int value, OutputStream out) throws IOException{
 		int shift = 0;
+// 		System.err.print("Encoding "+value+" as ");
 		while ((value >>> shift) >= 0x80) shift += 7;
 		for (; shift>=0; shift -= 7) {
-			byte b = (byte)(value >>> shift);
+			byte b = (byte)((value >>> shift) & 0x7F);
 			if (shift>0) b |= 0x80;
+// 			System.err.print(" "+(b & 0xFF));
 			out.write(b);
 		}
+// 		System.err.println();
 	}
 
 	public static int varlen_decode(ByteBuffer in) throws IOException {
 		long acc = 0;
 		int bits = 0;
 		boolean more;
+// 		System.err.print("Decoding");
 		do {
 			int b = in.get();
+// 			System.err.print(" "+(b & 0xff));
 			more = (b < 0);
 			b &= 0x7F;
 			acc = (acc << 7) | (b & 0x7F);
 			bits += 7;
 			if (acc > Integer.MAX_VALUE) throw new IOException("Variable-length encoded integer is too large: "+acc);
 		} while (more);
+// 		System.err.println(" as "+acc);
 		return (int) acc;
 	}
 }
