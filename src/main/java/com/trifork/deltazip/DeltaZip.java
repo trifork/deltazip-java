@@ -32,10 +32,12 @@ public class DeltaZip {
 
 	protected static final CompressionMethod[] COMPRESSION_METHODS;
 	protected static final CompressionMethod UNCOMPRESSED_INSTANCE = new UncompressedMethod();
+	protected static final CompressionMethod DEFLATED_INSTANCE = new DeflatedMethod();
 	protected static final CompressionMethod CHUNKED_INSTANCE = new ChunkedMethod();
 	static {
 		COMPRESSION_METHODS = new CompressionMethod[16];
 		insertCM(COMPRESSION_METHODS, UNCOMPRESSED_INSTANCE);
+		insertCM(COMPRESSION_METHODS, DEFLATED_INSTANCE);
 		insertCM(COMPRESSION_METHODS, CHUNKED_INSTANCE);
 	}
 	private static void insertCM(CompressionMethod[] table, CompressionMethod cm) {
@@ -93,9 +95,9 @@ public class DeltaZip {
 		ByteBuffer last_version = get();
 
 		if (last_version != null) {
-			pack_compressed(last_version, allToByteArray(new_version), baos);
+			pack_delta(last_version, allToByteArray(new_version), baos);
 		}
-		pack_uncompressed(new_version, baos);
+		pack_snapshot(new_version, baos);
 
 		return new AppendSpecification(current_pos, baos.toByteArray());
 	}
@@ -114,11 +116,11 @@ public class DeltaZip {
 
 		while (versions_to_add.hasNext()) {
 			ByteBuffer cur = versions_to_add.next();
-			if (prev_version != null) pack_compressed(prev_version, allToByteArray(cur), baos);
+			if (prev_version != null) pack_delta(prev_version, allToByteArray(cur), baos);
 			prev_version = cur;
 		}
 
-		pack_uncompressed(prev_version, baos);
+		pack_snapshot(prev_version, baos);
 
 		return new AppendSpecification(current_pos, baos.toByteArray());
 	}
@@ -175,12 +177,17 @@ public class DeltaZip {
 		exposed_current_version = ByteBuffer.wrap(current_version).asReadOnlyBuffer();
 	}
 
-	protected void pack_uncompressed(ByteBuffer version, ExtByteArrayOutputStream dst) {
-		pack_entry(version, null, UNCOMPRESSED_INSTANCE, dst);
+	//====================
+
+	protected void pack_snapshot(ByteBuffer version, ExtByteArrayOutputStream dst) {
+		pack_entry(version, null, DEFLATED_INSTANCE, dst);
 	}
-	protected void pack_compressed(ByteBuffer version, byte[] ref_version, ExtByteArrayOutputStream dst) {
+
+	protected void pack_delta(ByteBuffer version, byte[] ref_version, ExtByteArrayOutputStream dst) {
 		pack_entry(version, ref_version, CHUNKED_INSTANCE, dst);
 	}
+
+	//====================
 
 	protected void pack_entry(ByteBuffer version, byte[] ref_version, CompressionMethod cm, ExtByteArrayOutputStream dst) {
 		int tag_blank = dst.insertBlank(4);
