@@ -113,15 +113,32 @@ public class DeltaZipTest {
 	@Test
 	public void totally_random_test() throws IOException {
 		final Random rnd = new Random();
+
+		{ // 100 x 1K.
+			ByteBuffer[] versions = new ByteBuffer[100];
+			for (int i=0; i<versions.length; i++)
+				versions[i] = createRandomBinary(1000, rnd);
+			
+			series_test_with(versions);
+		}
+
+		{ // 40 x 100K.
+			ByteBuffer[] versions = new ByteBuffer[40];
+			for (int i=0; i<versions.length; i++)
+				versions[i] = createRandomBinary(100000, rnd);
+			
+			series_test_with(versions);
+		}
+	}
+
+
+	public void series_test_with(ByteBuffer[] versions) throws IOException {
 		byte[] file = new byte[0];
 
-		// Create versions:
-		ByteBuffer[] versions = new ByteBuffer[100];
-		for (int i=0; i<versions.length; i++)
-			versions[i] = createRandomBinary(1000, rnd);
-
+		System.err.print("<");
 		// Add versions:
-		for (int i=0; i<100; i++) {
+		for (int i=0; i<versions.length; i++) {
+			System.err.print(".");
 			ByteArrayAccess access = new ByteArrayAccess(file);
 			DeltaZip dz = new DeltaZip(access);
 			AppendSpecification app_spec =
@@ -133,6 +150,7 @@ public class DeltaZipTest {
 			ByteArrayAccess access = new ByteArrayAccess(file);
 			DeltaZip dz = new DeltaZip(access);
 			for (int i=versions.length-1; i>=0; i--) {
+				System.err.print(",");
 				assertEquals(dz.get(), versions[i]);
 				if (i>0) {
 					assert(dz.hasPrevious());
@@ -141,6 +159,8 @@ public class DeltaZipTest {
 			}
 			assert(! dz.hasPrevious());
 		}
+		System.err.println(">");
+
 	}
 
 	//======================================================================
