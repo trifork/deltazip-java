@@ -95,6 +95,12 @@ public abstract class DZUtil {
 
 	}
 
+	//====================
+	public static void writeBufferTo(ByteBuffer data, OutputStream out) throws IOException {
+		WritableByteChannel channel = Channels.newChannel(out);
+		while (data.hasRemaining()) channel.write(data);
+	}
+
 	//==================== Deflate / Inflate ====================
 
 	public static class Dictionary {
@@ -108,24 +114,20 @@ public abstract class DZUtil {
 		}
 	}
 
-	public static byte[] inflate(Inflater inflater, ByteBuffer src, int uncomp_length, Dictionary dict) {
+	public static byte[] inflate(Inflater inflater, ByteBuffer src, int uncomp_length, Dictionary dict) throws IOException {
 		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		try {
-			inflate(inflater, src, uncomp_length, baos, dict);
-			baos.close();
-		} catch (IOException ioe) {throw new RuntimeException(ioe);}
+		inflate(inflater, src, uncomp_length, baos, dict);
+		baos.close();
 		return baos.toByteArray();
 	}
 
 	public static void inflate(Inflater inflater, ByteBuffer src, int comp_length, OutputStream dst, Dictionary dict) throws IOException {
 		inflater.reset();
 		InflaterOutputStream zos = new InflaterOutputStream(dst, inflater);
-		WritableByteChannel channel = Channels.newChannel(zos);
-
-		ByteBuffer src2 = takeStart(src, comp_length);
 
 		if (dict != null) inflater.setDictionary(dict.data, dict.off, dict.len);
-		while (src2.hasRemaining()) channel.write(src2);
+
+		writeBufferTo(takeStart(src, comp_length), zos);
 		zos.finish();
 	}
 
@@ -141,12 +143,10 @@ public abstract class DZUtil {
 	public static void deflate(Deflater deflater, ByteBuffer src, int uncomp_length, OutputStream dst, Dictionary dict) throws IOException {
 		deflater.reset();
 		DeflaterOutputStream zos = new DeflaterOutputStream(dst, deflater);
-		WritableByteChannel channel = Channels.newChannel(zos);
-
-		ByteBuffer src2 = takeStart(src, uncomp_length);
 
 		if (dict != null) deflater.setDictionary(dict.data, dict.off, dict.len);
-		while (src2.hasRemaining()) channel.write(src2);
+
+		writeBufferTo(takeStart(src, uncomp_length), zos);
 		zos.finish();
 	}
 
