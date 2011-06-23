@@ -131,6 +131,25 @@ public class DeltaZipTest {
 		}
 	}
 
+	@Test
+	public void very_related_test() throws IOException {
+		final Random rnd = new Random();
+
+		{ // 40 x 100K.
+			ByteBuffer[] versions = new ByteBuffer[40];
+			versions[0] = createRandomBinary(100000, rnd);
+			for (int i=1; i<versions.length; i++) {
+				byte[] tmp = DeltaZip.allToByteArray(versions[i-1]);
+				int nMutations = rnd.nextInt(20);
+				for (int k=0; k<nMutations; k++)
+					tmp[rnd.nextInt(tmp.length)] = (byte) rnd.nextInt(256);
+				versions[i] = ByteBuffer.wrap(tmp);
+			}
+			
+			series_test_with(versions);
+		}
+	}
+
 
 	public void series_test_with(ByteBuffer[] versions) throws IOException {
 		byte[] file = new byte[0];
