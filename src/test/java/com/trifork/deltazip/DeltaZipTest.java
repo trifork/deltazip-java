@@ -150,6 +150,49 @@ public class DeltaZipTest {
 		}
 	}
 
+	@Test
+	public void somewhat_related_test() throws IOException {
+		final Random rnd = new Random();
+
+		{ // 40 x 100K.
+			ByteBuffer[] versions = new ByteBuffer[40];
+			versions[0] = createRandomBinary(100000, rnd);
+			for (int i=1; i<versions.length; i++) {
+				byte[] tmp = DeltaZip.allToByteArray(versions[i-1]);
+
+				// Single-byte mutations:
+				int nMutations = rnd.nextInt(20);
+				for (int j=0; j<nMutations; j++)
+					tmp[rnd.nextInt(tmp.length)] = (byte) rnd.nextInt(256);
+				versions[i] = ByteBuffer.wrap(tmp);
+
+				// Random runs:
+				int nRuns = rnd.nextInt(10);
+				for (int j=0; j<nRuns; j++) {
+					int start = 0, end = tmp.length;
+					int iters = rnd.nextInt(10);
+					for (int k=0; k<iters; k++) { // Select part.
+						int mid = start + rnd.nextInt(end - start);
+						if (rnd.nextBoolean()) start=mid; else end=mid;
+					}
+
+					for (int k=start; k<end; k++) tmp[k] = (byte)rnd.nextInt(256);
+				}
+				
+
+				// Block swaps:
+				int nSwaps = rnd.nextInt(10);
+				for (int j=0; j<nSwaps; j++) {
+					//TODO
+				}
+
+				versions[i] = ByteBuffer.wrap(tmp);
+			}
+			
+			series_test_with(versions);
+		}
+	}
+
 
 	public void series_test_with(ByteBuffer[] versions) throws IOException {
 		byte[] file = new byte[0];
