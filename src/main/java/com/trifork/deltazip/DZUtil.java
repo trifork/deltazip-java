@@ -96,14 +96,30 @@ public abstract class DZUtil {
 
 	}
 
-	//====================
+	//==================== ByteBuffer utilities ====================
+
 	public static void writeBufferTo(ByteBuffer data, OutputStream out) throws IOException {
 		WritableByteChannel channel = Channels.newChannel(out);
 		while (data.hasRemaining()) channel.write(data);
 	}
 
+	public static byte[] allToByteArray(ByteBuffer org) {
+		int save_pos = org.position();
+		org.position(0);
+		byte[] buf = remainingToByteArray(org);
+		org.position(save_pos);
+
+		return buf;
+	}
+
+	public static byte[] remainingToByteArray(ByteBuffer org) {
+		byte[] buf = new byte[org.remaining()];
+		org.get(buf);
+		return buf;
+	}
+
 	public static int computeAdler32(ByteBuffer data) {
-		return computeAdler32(DeltaZip.allToByteArray(data)); // Oh, the copying.
+		return computeAdler32(allToByteArray(data)); // Oh, the copying.
 	}
 	public static int computeAdler32(byte[] data) {
 		Adler32 acc = new Adler32();

@@ -23,7 +23,7 @@ class UncompressedMethod extends DeltaZip.CompressionMethod {
 	}
 
 	public byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) {
-		return DeltaZip.remainingToByteArray(org);
+		return DZUtil.remainingToByteArray(org);
 	}
 }
 

@@ -141,7 +141,7 @@ public class DeltaZipTest {
 			ByteBuffer[] versions = new ByteBuffer[40];
 			versions[0] = createRandomBinary(100000, rnd);
 			for (int i=1; i<versions.length; i++) {
-				byte[] tmp = DeltaZip.allToByteArray(versions[i-1]);
+				byte[] tmp = DZUtil.allToByteArray(versions[i-1]);
 				int nMutations = rnd.nextInt(20);
 				for (int k=0; k<nMutations; k++)
 					tmp[rnd.nextInt(tmp.length)] = (byte) rnd.nextInt(256);
@@ -160,7 +160,7 @@ public class DeltaZipTest {
 			ByteBuffer[] versions = new ByteBuffer[40];
 			versions[0] = createRandomBinary(100000, rnd);
 			for (int i=1; i<versions.length; i++) {
-				byte[] tmp = DeltaZip.allToByteArray(versions[i-1]);
+				byte[] tmp = DZUtil.allToByteArray(versions[i-1]);
 
 				// Single-byte mutations:
 				int nMutations = rnd.nextInt(20);
@@ -230,12 +230,12 @@ public class DeltaZipTest {
 	//======================================================================
 
 	public static String toString(ByteBuffer buf) {
-		String r = new String(DeltaZip.allToByteArray(buf.duplicate()));
+		String r = new String(DZUtil.allToByteArray(buf.duplicate()));
 		return r;
 	}
 
 	public static void dump(String s, ByteBuffer buf) {
-		dump(s, DeltaZip.allToByteArray(buf.duplicate()));
+		dump(s, DZUtil.allToByteArray(buf.duplicate()));
 	}
 
 	public static void dump(String s, byte[] buf) {

@@ -98,7 +98,7 @@ public class DeltaZip {
 		ByteBuffer last_version = get();
 
 		if (last_version != null) {
-			pack_delta(last_version, allToByteArray(new_version), baos);
+			pack_delta(last_version, DZUtil.allToByteArray(new_version), baos);
 		}
 		pack_snapshot(new_version, baos);
 
@@ -119,7 +119,9 @@ public class DeltaZip {
 
 		while (versions_to_add.hasNext()) {
 			ByteBuffer cur = versions_to_add.next();
-			if (prev_version != null) pack_delta(prev_version, allToByteArray(cur), baos);
+			if (prev_version != null) {
+				pack_delta(prev_version, DZUtil.allToByteArray(cur), baos);
+			}
 			prev_version = cur;
 		}
 
@@ -228,27 +230,8 @@ public class DeltaZip {
 		dst.writeBigEndianInteger(tag, 4);
 	}
 
-	//==================== Compression methods =============================
-	protected static abstract class CompressionMethod {
-		public abstract int methodNumber();
-		public abstract void compress(ByteBuffer org, byte[] ref_data, OutputStream dst) throws IOException;
-		public abstract byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) throws IOException;
-	}
 
-	public static byte[] allToByteArray(ByteBuffer org) {
-		int save_pos = org.position();
-		org.position(0);
-		byte[] buf = remainingToByteArray(org);
-		org.position(save_pos);
-
-		return buf;
-	}
-
-	public static byte[] remainingToByteArray(ByteBuffer org) {
-		byte[] buf = new byte[org.remaining()];
-		org.get(buf);
-		return buf;
-	}
+	//========== ByteArrayOutputStream with 'blanks' support ==========
 
 	protected static class ExtByteArrayOutputStream extends ByteArrayOutputStream {
 		public int insertBlank(int len) {
@@ -275,6 +258,13 @@ public class DeltaZip {
 				write(value >> (8*i));
 			}
 		}
+	}
+
+	//==================== Compression methods =============================
+	protected static abstract class CompressionMethod {
+		public abstract int methodNumber();
+		public abstract void compress(ByteBuffer org, byte[] ref_data, OutputStream dst) throws IOException;
+		public abstract byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) throws IOException;
 	}
 
 	//==================== Interface types ==============================

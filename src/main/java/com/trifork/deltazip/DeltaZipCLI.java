@@ -73,7 +73,7 @@ public abstract class DeltaZipCLI {
 				}
 				dz.previous();
 			}
-			System.out.write(DeltaZip.allToByteArray(dz.get()));
+			System.out.write(DZUtil.allToByteArray(dz.get()));
 		}
 		fa.close();
 	}
