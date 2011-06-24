@@ -14,6 +14,7 @@ import java.util.zip.Deflater;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.Inflater;
 import java.util.zip.InflaterOutputStream;
+import java.util.zip.Adler32;
 
 import java.io.OutputStream;
 
@@ -99,6 +100,15 @@ public abstract class DZUtil {
 	public static void writeBufferTo(ByteBuffer data, OutputStream out) throws IOException {
 		WritableByteChannel channel = Channels.newChannel(out);
 		while (data.hasRemaining()) channel.write(data);
+	}
+
+	public static int computeAdler32(ByteBuffer data) {
+		return computeAdler32(DeltaZip.allToByteArray(data)); // Oh, the copying.
+	}
+	public static int computeAdler32(byte[] data) {
+		Adler32 acc = new Adler32();
+		acc.update(data);
+		return (int)acc.getValue();
 	}
 
 	//==================== Deflate / Inflate ====================

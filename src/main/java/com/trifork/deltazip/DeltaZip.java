@@ -55,6 +55,7 @@ public class DeltaZip {
 	private long       current_pos, current_size;
 	private int        current_method;
 	private byte[]     current_version;
+	private int        current_checksum;
 	private ByteBuffer exposed_current_version;
 
 	//==================== API ==========================================
@@ -152,31 +153,45 @@ public class DeltaZip {
 		current_pos = access.getSize();
 	}
 
+	private static final int ENVELOPE_HEADER  = 4 + 4; // Start-tag + checksum
+	private static final int ENVELOPE_TRAILER = 4; // End.tag
+	private static final int ENVELOPE_OVERHEAD = ENVELOPE_HEADER + ENVELOPE_TRAILER;
 	protected void goto_previous_position_and_compute_current_version() throws IOException {
-		ByteBuffer tag_buf = access.pread(current_pos-4, 4);
+		ByteBuffer tag_buf = access.pread(current_pos-ENVELOPE_TRAILER, ENVELOPE_TRAILER);
 		int tag = tag_buf.getInt(0);
 		int size = tag &~ (-1 << 28);
 		int method = (tag >> 28) & 15;
 // 		System.err.println("DB| tag="+tag+" -> "+method+":"+size);
 
-		// Get start-tag plus data:
-		long start_pos = current_pos-size-8;
-		ByteBuffer data_buf = access.pread(start_pos, size+4);
+		// Read envelope header:
+		long start_pos = current_pos - size - ENVELOPE_OVERHEAD;
+		ByteBuffer data_buf = access.pread(start_pos, size + ENVELOPE_HEADER);
 		data_buf.rewind();
 		int start_tag = data_buf.getInt();
 		if (start_tag != tag) throw new IOException("Data error - tag mismatch @ "+start_pos+";"+current_pos);
+		int adler32 = data_buf.getInt();
 
-		current_pos = start_pos;
-		compute_current_version(method, data_buf);
+		// Unpack:
+		byte[] version = compute_current_version(method, data_buf, start_pos);
+
+		// Verify checksum:
+		int actual_adler32 = DZUtil.computeAdler32(version);
+		if (actual_adler32 != adler32)
+			throw new IOException("Data error - checksum mismatch @ "+start_pos+": stored is "+adler32+" but computed is "+actual_adler32);
+
+		// Commit:
+		this.current_pos = start_pos;
+		this.current_method = method;
+		this.current_version = version;
+		this.exposed_current_version = ByteBuffer.wrap(current_version).asReadOnlyBuffer();
+		this.current_checksum = actual_adler32;
 	}
 
-	protected void compute_current_version(int method, ByteBuffer data_buf) throws IOException {
+	protected byte[] compute_current_version(int method, ByteBuffer data_buf, long pos) throws IOException {
 		CompressionMethod cm = COMPRESSION_METHODS[method];
-		if (cm==null) throw new IOException("Invalid compression method: "+method+" @ "+current_pos);
+		if (cm==null) throw new IOException("Invalid compression method: "+method+" @ "+pos);
 
-		current_method = method;
-		current_version = cm.uncompress(data_buf, current_version, inflater);
-		exposed_current_version = ByteBuffer.wrap(current_version).asReadOnlyBuffer();
+		return cm.uncompress(data_buf, current_version, inflater);
 	}
 
 	//====================
@@ -192,7 +207,11 @@ public class DeltaZip {
 	//====================
 
 	protected void pack_entry(ByteBuffer version, byte[] ref_version, CompressionMethod cm, ExtByteArrayOutputStream dst) {
+		int adler32 = DZUtil.computeAdler32(version);
+
 		int tag_blank = dst.insertBlank(4);
+		dst.writeBigEndianInteger(adler32, 4);
+
 		int size_before = dst.size();
 		try {
 			cm.compress(version.duplicate(), ref_version, dst);

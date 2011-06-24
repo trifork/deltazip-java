@@ -25,20 +25,22 @@ public class DeltaZipTest {
 		/** Chunked-deflate, no prefix/suffix. */
 		byte[] two_revs1 = {
 			(byte)0xCE, (byte)0xB4, 0x7A, 0x10,
-			64,0,0,7,0,0,4,(byte)243,
-			0,113,0,64,0,0,7,0,
-			0,0,13,72,101,108,108,111,
-			44,32,87,111,114,108,100,33,
+			64,0,0,7, 0x05,(byte)0x8C,0x01,(byte)0xF5,
+			0,0,4,(byte)243, 0,113,0,
+			64,0,0,7,
+			0,0,0,13, 0x1F,(byte)0x9E,0x04,0x6A,
+			72,101,108,108,111, 44,32,87,111,114,108,100,33,
 			0,0,0,13};
 
 		/** Chunked-deflate, using prefix. */
 		byte[] two_revs2 = {
 			(byte)0xCE, (byte)0xB4, 0x7A, 0x10,
-			64,0,0,5,8,0,2,0,
-			4,64,0,0,5,0,0,0,
-			13,72,101,108,108,111,44,32,
-			87,111,114,108,100,33,0,0,
-			0,13};
+			64,0,0,5, 0x05,(byte)0x8C,0x01,(byte)0xF5,
+			8,0,2,0, 4,
+			64,0,0,5,
+			0,0,0,13, 0x1F,(byte)0x9E,0x04,0x6A,
+			72,101,108,108,111,44,32,87,111,114,108,100,33,
+			0,0,0,13};
 
 		ByteBuffer exp_rev1 = ByteBuffer.wrap("Hello, World!".getBytes("ISO-8859-1"));
 		ByteBuffer exp_rev2 = ByteBuffer.wrap("Hello".getBytes("ISO-8859-1"));
