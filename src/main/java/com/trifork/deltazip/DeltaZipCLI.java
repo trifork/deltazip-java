@@ -15,10 +15,11 @@ public abstract class DeltaZipCLI {
 		if (args.length < 1) {usage(); System.exit(1);}
 
 		String command = args[0];
-		if ("count".equals(command)) do_count(args);
-		else if ("get".equals(command)) do_get(args);
+		if ("count".equals(command))       do_count(args);
+		else if ("list".equals(command))   do_list(args);
+		else if ("get".equals(command))    do_get(args);
 		else if ("create".equals(command)) do_create(args);
-		else if ("add".equals(command)) do_add(args);
+		else if ("add".equals(command))    do_add(args);
 		else {usage(); System.exit(1);}
 	}
 
@@ -32,6 +33,7 @@ public abstract class DeltaZipCLI {
 		System.err.println("  add [dzfile] [version-files]");
 	}
 
+	//====================
 	public static void do_count(String[] args) throws IOException {
 		if (args.length != 2) {usage(); System.exit(1);}
 		FileAccess fa = openDZFile(args[1]);
@@ -49,6 +51,37 @@ public abstract class DeltaZipCLI {
 		System.out.println(count);
 	}
 
+	//====================
+	public static void do_list(String[] args) throws IOException {
+		if (args.length != 2) {usage(); System.exit(1);}
+		FileAccess fa = openDZFile(args[1]);
+		DeltaZip dz = new DeltaZip(fa);
+
+		System.out.println("Nr:\tMethod\tCompSize\tVersionSize\tChecksum");
+
+		if (dz.get() == null) return;
+
+		int nr = 0;
+		for (;; nr++) {
+			String line =
+				String.format("%d:\t"+"M%d\t"+"%8d\t"+"%8d\t"+"%8x",
+							  (-nr),
+							  dz.getCurrentMethod(),
+							  dz.getCurrentCompSize(),
+							  dz.getCurrentRawSize(),
+							  dz.getCurrentChecksum());
+			System.out.println(line);
+			
+			if (dz.hasPrevious()) {
+				dz.previous();
+			} else {
+				break;
+			}
+		}
+		fa.close();
+	}
+
+	//====================
 	public static void do_get(String[] args) throws IOException {
 		if (args.length < 2) {usage(); System.exit(1);}
 		int rev_nr = 0;
@@ -78,6 +111,7 @@ public abstract class DeltaZipCLI {
 		fa.close();
 	}
 
+	//====================
 	public static void do_create(final String[] args) throws IOException {
 		if (args.length < 2) {usage(); System.exit(1);}
 		String filename = args[1];
@@ -93,6 +127,7 @@ public abstract class DeltaZipCLI {
 		fa.close();
 	}
 
+	//====================
 	public static void do_add(String[] args) throws IOException {
 		if (args.length < 2) {usage(); System.exit(1);}
 		String filename = args[1];
@@ -106,7 +141,6 @@ public abstract class DeltaZipCLI {
 		AppendSpecification app_spec = dz.add(to_add);
 		fa.applyAppendSpec(app_spec);
 	}
-
 
 	//======================================================================
 	private static FileAccess openDZFile(String filename) throws IOException {

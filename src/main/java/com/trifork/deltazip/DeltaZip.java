@@ -52,7 +52,8 @@ public class DeltaZip {
 	private final Inflater inflater = new Inflater(true);
 	private final Access access;
 
-	private long       current_pos, current_size;
+	private long       current_pos;
+	private int        current_size;
 	private int        current_method;
 	private byte[]     current_version;
 	private int        current_checksum;
@@ -130,6 +131,12 @@ public class DeltaZip {
 		return new AppendSpecification(current_pos, baos.toByteArray());
 	}
 
+	//==================== Stats API =======================================
+	public int getCurrentChecksum() {return current_checksum;}
+	public int getCurrentMethod()   {return current_method;}
+	public int getCurrentCompSize() {return current_size;}
+	public int getCurrentRawSize()  {return current_version==null? -1 : current_version.length;}
+
 	//==================== Internals =======================================
 
 	protected void check_magic_header() throws IOException {
@@ -182,8 +189,9 @@ public class DeltaZip {
 			throw new IOException("Data error - checksum mismatch @ "+start_pos+": stored is "+adler32+" but computed is "+actual_adler32);
 
 		// Commit:
-		this.current_pos = start_pos;
-		this.current_method = method;
+		this.current_pos     = start_pos;
+		this.current_method  = method;
+		this.current_size    = size;
 		this.current_version = version;
 		this.exposed_current_version = ByteBuffer.wrap(current_version).asReadOnlyBuffer();
 		this.current_checksum = actual_adler32;
