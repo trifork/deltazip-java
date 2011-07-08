@@ -45,7 +45,9 @@ public class DeltaZipTest {
 		ByteBuffer exp_rev1 = ByteBuffer.wrap("Hello, World!".getBytes("ISO-8859-1"));
 		ByteBuffer exp_rev2 = ByteBuffer.wrap("Hello".getBytes("ISO-8859-1"));
 
+		System.err.println("two_revs 1...");
 		test_two_revs_with(two_revs1, exp_rev1, exp_rev2);
+		System.err.println("two_revs 2...");
 		test_two_revs_with(two_revs2, exp_rev1, exp_rev2);
 	}
 
@@ -66,6 +68,7 @@ public class DeltaZipTest {
 
 	@Test
 	public void test_add_get() throws Exception {
+		System.err.println("test_add_get...");
 		ByteBuffer rev1 = ByteBuffer.wrap("Hello".getBytes("ISO-8859-1"));
 		ByteBuffer rev1a = ByteBuffer.wrap("World!".getBytes("ISO-8859-1"));
 		ByteBuffer rev1b = ByteBuffer.wrap("Held!".getBytes("ISO-8859-1"));

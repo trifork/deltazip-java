@@ -30,6 +30,7 @@ public abstract class DeltaZipCLI {
 		System.err.println("  get  [dzfile]    Print the last version");
 		System.err.println("  get @n [dzfile]  Print the nth-last version");
 		System.err.println("  count [dzfile]   Count the number of versions");
+		System.err.println("  list [dzfile]   List versions and their statistics");
 		System.err.println("  add [dzfile] [version-files]");
 	}
 

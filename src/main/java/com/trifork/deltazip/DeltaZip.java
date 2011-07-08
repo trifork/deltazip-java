@@ -185,8 +185,10 @@ public class DeltaZip {
 
 		// Verify checksum:
 		int actual_adler32 = DZUtil.computeAdler32(version);
-		if (actual_adler32 != adler32)
+		if (actual_adler32 != adler32) {
+			dump("checksumming failed: "+actual_adler32+" rather than "+adler32, version);
 			throw new IOException("Data error - checksum mismatch @ "+start_pos+": stored is "+adler32+" but computed is "+actual_adler32);
+		}
 
 		// Commit:
 		this.current_pos     = start_pos;
@@ -195,6 +197,15 @@ public class DeltaZip {
 		this.current_version = version;
 		this.exposed_current_version = ByteBuffer.wrap(current_version).asReadOnlyBuffer();
 		this.current_checksum = actual_adler32;
+	}
+	public static void dump(String s, byte[] buf) {
+		System.err.print(s);
+		System.err.print("<<");
+		for (int i=0; i<buf.length; i++) {
+			if (i>0) System.err.print(",");
+			System.err.print(buf[i] & 0xff);
+		}
+		System.err.println(">>");
 	}
 
 	protected byte[] compute_current_version(int method, ByteBuffer data_buf, long pos) throws IOException {
