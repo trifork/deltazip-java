@@ -2,21 +2,28 @@ package com.trifork.deltazip;
 
 import java.io.IOException;
 import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.RandomAccessFile;
+import java.io.OutputStream;
+import java.io.InputStream;
 
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 import java.nio.channels.FileChannel;
 
+import java.util.Arrays;
+
 import java.util.zip.Deflater;
-import java.util.zip.DeflaterOutputStream;
+// import java.util.zip.DeflaterOutputStream;
 import java.util.zip.Inflater;
 import java.util.zip.InflaterOutputStream;
+import com.jcraft.jzlib.JZlib;
+import com.jcraft.jzlib.ZStream;
+import com.jcraft.jzlib.ZInputStream;
+import com.jcraft.jzlib.ZOutputStream;
 import java.util.zip.Adler32;
-
-import java.io.OutputStream;
 
 public abstract class DZUtil {
 	public static class ByteArrayAccess implements DeltaZip.Access {
@@ -99,8 +106,17 @@ public abstract class DZUtil {
 	//==================== ByteBuffer utilities ====================
 
 	public static void writeBufferTo(ByteBuffer data, OutputStream out) throws IOException {
+		System.err.println("DB| writeBufferTo: "+data.remaining());
 		WritableByteChannel channel = Channels.newChannel(out);
 		while (data.hasRemaining()) channel.write(data);
+	}
+
+	public static void transfer(InputStream in, OutputStream out) throws IOException {
+		int n;
+		byte[] buf = new byte[512];
+		int total=0;
+		while ((n=in.read(buf)) > 0) {System.err.println("DB| transfer: "+n); out.write(buf,0,n); total += n;}
+		System.err.println("DB| transfered: "+total);
 	}
 
 	public static byte[] allToByteArray(ByteBuffer org) {
@@ -138,23 +154,60 @@ public abstract class DZUtil {
 			this.off = off;
 			this.len = len;
 		}
+
+		public byte[] withZeroOffset() {
+			return off==0? data : Arrays.copyOfRange(data, off, off+len);
+		}
+	}
+	
+	static class MyZOutputStream extends ZOutputStream {
+		public MyZOutputStream(OutputStream out, int level, boolean nowrap) {
+			super(out, level, nowrap);
+		}
+		public void setDeflateDict(Dictionary dict) {
+			checkOK(z,z.deflateSetDictionary(dict.withZeroOffset(), dict.len));
+		}
+		public String stats() {
+			return "Stats: {in="+z.total_in+", out="+z.total_out+"}";
+		}
+	}
+
+	static class MyZInputStream extends ZInputStream {
+		public MyZInputStream(InputStream in, boolean nowrap) {
+			super(in, nowrap);
+		}
+		public void setInflateDict(Dictionary dict) {
+// 			DeltaZip.dump("MyZInputStream.setInflateDict(): len="+dict.len, dict.withZeroOffset());
+// 			z.istate.mode = com.jcraft.jzlib.Inflate.DICT0;
+			checkOK(z,z.inflateSetDictionary(dict.withZeroOffset(), dict.len));
+		}
+		public String stats() {
+			return "Stats: {in="+z.total_in+", out="+z.total_out+"}";
+		}
+	}
+
+	static void checkOK(ZStream z, int errcode) {
+		if (errcode != JZlib.Z_OK) {
+			throw new RuntimeException("JZlib operation failed: "+z.msg+" (errcode="+errcode+")");
+		}
 	}
 
 	public static byte[] inflate(Inflater inflater, ByteBuffer src, int uncomp_length, Dictionary dict) throws IOException {
 		ByteArrayOutputStream baos = new ByteArrayOutputStream();
 		inflate(inflater, src, uncomp_length, baos, dict);
 		baos.close();
+		System.err.println("DB| inflate: |baos|="+baos.size());
 		return baos.toByteArray();
 	}
 
-	public static void inflate(Inflater inflater, ByteBuffer src, int comp_length, OutputStream dst, Dictionary dict) throws IOException {
-		inflater.reset();
-		InflaterOutputStream zos = new InflaterOutputStream(dst, inflater);
-
-		if (dict != null) inflater.setDictionary(dict.data, dict.off, dict.len);
-
-		writeBufferTo(takeStart(src, comp_length), zos);
-		zos.finish();
+	public static void inflate(Inflater _inflater, ByteBuffer src, int comp_length, OutputStream dst, Dictionary dict) throws IOException {
+		// Apparently this goes against the grain... so we need to copy.
+		ByteArrayInputStream src_str = new ByteArrayInputStream(remainingToByteArray(takeStart(src, comp_length)));
+		System.err.println("DB| inflate: from "+src_str.available());
+		MyZInputStream zis = new MyZInputStream(src_str, true);
+		if (dict != null) zis.setInflateDict(dict);
+		transfer(zis, dst);
+		System.err.println("DB| inflate counts: "+zis.stats());
 	}
 
 	public static byte[] deflate(Deflater deflater, ByteBuffer src, int uncomp_length, Dictionary dict) {
@@ -166,14 +219,12 @@ public abstract class DZUtil {
 		return baos.toByteArray();
 	}
 
-	public static void deflate(Deflater deflater, ByteBuffer src, int uncomp_length, OutputStream dst, Dictionary dict) throws IOException {
-		deflater.reset();
-		DeflaterOutputStream zos = new DeflaterOutputStream(dst, deflater);
-
-		if (dict != null) deflater.setDictionary(dict.data, dict.off, dict.len);
-
+	public static void deflate(Deflater _deflater, ByteBuffer src, int uncomp_length, OutputStream dst, Dictionary dict) throws IOException {
+		MyZOutputStream zos = new MyZOutputStream(dst, JZlib.Z_BEST_COMPRESSION, true);
+		if (dict != null) zos.setDeflateDict(dict);
 		writeBufferTo(takeStart(src, uncomp_length), zos);
 		zos.finish();
+		System.err.println("DB| deflate counts: "+zos.stats());
 	}
 
 	/** Create a ByteBuffer which contains the 'length' first bytes of 'org'. Advance 'org' with 'length' bytes. */
