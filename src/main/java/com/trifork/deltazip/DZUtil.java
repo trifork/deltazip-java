@@ -106,7 +106,6 @@ public abstract class DZUtil {
 	//==================== ByteBuffer utilities ====================
 
 	public static void writeBufferTo(ByteBuffer data, OutputStream out) throws IOException {
-		System.err.println("DB| writeBufferTo: "+data.remaining());
 		WritableByteChannel channel = Channels.newChannel(out);
 		while (data.hasRemaining()) channel.write(data);
 	}
@@ -115,8 +114,7 @@ public abstract class DZUtil {
 		int n;
 		byte[] buf = new byte[512];
 		int total=0;
-		while ((n=in.read(buf)) > 0) {System.err.println("DB| transfer: "+n); out.write(buf,0,n); total += n;}
-		System.err.println("DB| transfered: "+total);
+		while ((n=in.read(buf)) > 0) {out.write(buf,0,n); total += n;}
 	}
 
 	public static byte[] allToByteArray(ByteBuffer org) {
@@ -196,18 +194,15 @@ public abstract class DZUtil {
 		ByteArrayOutputStream baos = new ByteArrayOutputStream();
 		inflate(inflater, src, uncomp_length, baos, dict);
 		baos.close();
-		System.err.println("DB| inflate: |baos|="+baos.size());
 		return baos.toByteArray();
 	}
 
 	public static void inflate(Inflater _inflater, ByteBuffer src, int comp_length, OutputStream dst, Dictionary dict) throws IOException {
 		// Apparently this goes against the grain... so we need to copy.
 		ByteArrayInputStream src_str = new ByteArrayInputStream(remainingToByteArray(takeStart(src, comp_length)));
-		System.err.println("DB| inflate: from "+src_str.available());
 		MyZInputStream zis = new MyZInputStream(src_str, true);
 		if (dict != null) zis.setInflateDict(dict);
 		transfer(zis, dst);
-		System.err.println("DB| inflate counts: "+zis.stats());
 	}
 
 	public static byte[] deflate(Deflater deflater, ByteBuffer src, int uncomp_length, Dictionary dict) {
@@ -224,7 +219,6 @@ public abstract class DZUtil {
 		if (dict != null) zos.setDeflateDict(dict);
 		writeBufferTo(takeStart(src, uncomp_length), zos);
 		zos.finish();
-		System.err.println("DB| deflate counts: "+zos.stats());
 	}
 
 	/** Create a ByteBuffer which contains the 'length' first bytes of 'org'. Advance 'org' with 'length' bytes. */
