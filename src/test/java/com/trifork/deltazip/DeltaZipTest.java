@@ -98,17 +98,32 @@ public class DeltaZipTest {
 		ByteArrayAccess access2 = new ByteArrayAccess(file2);
 		DeltaZip dz2 = new DeltaZip(access2);
 
-		// Tests:
+		//==== Tests:
+		// ...of get():
 		assertEquals(dz1.get(), rev1);
 
+		// ...of previous():
 		assertEquals(dz2.get(), rev2);
 		dz2.previous();
 		assertEquals(dz2.get(), rev1);
 
+		// ...of resetCursor():
 		dz2.resetCursor();
 		assertEquals(dz2.get(), rev2);
 		dz2.resetCursor();
 		assertEquals(dz2.get(), rev2);
+
+		// ...of clone():
+		DeltaZip dz2c = dz2.clone();
+		assertEquals(dz2c.get(), rev2);
+		dz2c.previous();
+		assertEquals(dz2c.get(), rev1);
+		// Now, dz2 should still be at the end:
+		assertEquals(dz2.get(), rev2);
+		// And vice versa:
+		dz2c.resetCursor();
+		dz2.previous();
+		assertEquals(dz2c.get(), rev2);
 
 		try {
 			dz1.previous();

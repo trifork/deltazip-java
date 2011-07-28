@@ -67,6 +67,18 @@ public class DeltaZip {
 		set_cursor_at_end();
 	}
 
+	/** For cloning. */
+	private DeltaZip(DeltaZip org) {
+		this.access = org.access;
+
+		this.current_pos = org.current_pos;
+		this.current_size = org.current_size;
+		this.current_method = org.current_method;
+		this.current_version = org.current_version;
+		this.current_checksum = org.current_checksum;
+		this.exposed_current_version = org.exposed_current_version;
+	}
+
 	/** Get the revision pointed to by the cursor. */
 	public ByteBuffer get() {
 		return (exposed_current_version==null) ? null
@@ -90,6 +102,10 @@ public class DeltaZip {
 	 */
 	public void resetCursor() throws IOException {
 		if (!at_initial_position()) set_cursor_at_end();
+	}
+
+	public DeltaZip clone() {
+		return new DeltaZip(this);
 	}
 
 	/** Computes an AppendSpecification for adding a version.
