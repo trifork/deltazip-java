@@ -105,6 +105,11 @@ public class DeltaZipTest {
 		dz2.previous();
 		assertEquals(dz2.get(), rev1);
 
+		dz2.resetCursor();
+		assertEquals(dz2.get(), rev2);
+		dz2.resetCursor();
+		assertEquals(dz2.get(), rev2);
+
 		try {
 			dz1.previous();
 			throw new RuntimeException("Assertion failed");

@@ -86,6 +86,12 @@ public class DeltaZip {
 		goto_previous_position_and_compute_current_version();
 	}
 
+	/** Set the cursor to point at the end of the archive.
+	 */
+	public void resetCursor() throws IOException {
+		if (!at_initial_position()) set_cursor_at_end();
+	}
+
 	/** Computes an AppendSpecification for adding a version.
 	 *  Has the side effect of placing the cursor at the end.
 	 */
@@ -160,6 +166,10 @@ public class DeltaZip {
 
 	protected void set_initial_position() throws IOException {
 		current_pos = access.getSize();
+	}
+
+	protected boolean at_initial_position() throws IOException {
+		return current_pos == access.getSize();
 	}
 
 	private static final int ENVELOPE_HEADER  = 4 + 4; // Start-tag + checksum
