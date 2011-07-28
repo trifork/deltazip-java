@@ -33,6 +33,10 @@ public abstract class DZUtil {
 
 		public long getSize() {return data.length;}
 
+		public ByteBuffer getRawData() {
+			return ByteBuffer.wrap(data).asReadOnlyBuffer();
+		}
+
 		public ByteBuffer pread(long pos, int len) throws IOException {
 			if (pos < 0 || pos > data.length) throw new IOException("Bad position");
 // 			System.err.println("DB| pread("+pos+","+len+") of "+data.length);

@@ -329,7 +329,7 @@ public class DeltaZip {
 		}
 
 		public AppendSpecification(long prefix_size, byte[] new_tail) {
-			this(prefix_size, ByteBuffer.wrap(new_tail));
+			this(prefix_size, ByteBuffer.wrap(new_tail).asReadOnlyBuffer());
 		}
 	}
 
