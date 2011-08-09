@@ -4,11 +4,11 @@ import java.util.Iterator;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 	
-class DeltaZipDataArchive implements DataArchive {
+public class DeltaZipDataArchive implements DataArchive {
 	private DeltaZip dz;
 	private DZUtil.ByteArrayAccess access;
 		
-	DeltaZipDataArchive(byte[] archive_data) throws IOException {
+	public DeltaZipDataArchive(byte[] archive_data) throws IOException {
 		this.access = new DZUtil.ByteArrayAccess(archive_data);
 		this.dz = new DeltaZip(access);
 	}
