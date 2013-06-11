@@ -4,7 +4,7 @@
 
     <groupId>com.trifork</groupId>
     <artifactId>deltazip-java</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>0.1-b78c91ce</version>
     <packaging>jar</packaging>
 
     <name>DeltaZip</name>
@@ -14,6 +14,16 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
+
+      <repositories>
+        <repository>
+          <id>Trifork-Nexus</id>
+          <name>Trifork Nexus</name>
+          <url>http://nexus.ci81.trifork.com/content/repositories/trifork-internal/</url>
+          <layout>default</layout>
+<!--           <snapshotPolicy>always</snapshotPolicy> -->
+        </repository>
+      </repositories>
 
     <dependencies>
 
@@ -27,7 +37,7 @@
 	<dependency>
 	  <groupId>com.jcraft</groupId>
 	  <artifactId>jzlib</artifactId>
-	  <version>1.0.7</version>
+	  <version>1.0.7-eriksoe-1cb0120e</version>
 	</dependency>
 
     </dependencies>
