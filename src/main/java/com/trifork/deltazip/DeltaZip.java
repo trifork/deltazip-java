@@ -24,10 +24,11 @@ public class DeltaZip {
 	public static final int METHOD_DEFLATED       = 1;
 	// Delta methods (4-15):
 	public static final int METHOD_CHUNKED        = 4;
-	public static final int METHOD_CHUNKED_MIDDLE = 5;
+    public static final int METHOD_CHUNKED_MIDDLE = 5;
+    public static final int METHOD_CHUNKED_MIDDLE2= 7;
 
 
-	private static final int VERSION_SIZE_BITS = 28;
+    private static final int VERSION_SIZE_BITS = 28;
 	private static final int VERSION_SIZE_LIMIT = 1 << VERSION_SIZE_BITS;
 
 	protected static final CompressionMethod[] COMPRESSION_METHODS;
@@ -35,13 +36,15 @@ public class DeltaZip {
 	protected static final CompressionMethod DEFLATED_INSTANCE = new DeflatedMethod();
 	protected static final CompressionMethod CHUNKED_INSTANCE = new ChunkedMethod();
 	protected static final CompressionMethod CHUNKED_MIDDLE_INSTANCE = new ChunkedMiddleMethod();
+	protected static final CompressionMethod CHUNKED_MIDDLE2_INSTANCE = new ChunkedMiddle2Method();
 	static {
 		COMPRESSION_METHODS = new CompressionMethod[16];
 		insertCM(COMPRESSION_METHODS, UNCOMPRESSED_INSTANCE);
 		insertCM(COMPRESSION_METHODS, DEFLATED_INSTANCE);
 		insertCM(COMPRESSION_METHODS, CHUNKED_INSTANCE);
-		insertCM(COMPRESSION_METHODS, CHUNKED_MIDDLE_INSTANCE);
-	}
+        insertCM(COMPRESSION_METHODS, CHUNKED_MIDDLE_INSTANCE);
+        insertCM(COMPRESSION_METHODS, CHUNKED_MIDDLE2_INSTANCE);
+    }
 	private static void insertCM(CompressionMethod[] table, CompressionMethod cm) {
 		table[cm.methodNumber()] = cm;
 	}
@@ -248,7 +251,20 @@ public class DeltaZip {
 	}
 
 	protected void pack_delta(ByteBuffer version, byte[] ref_version, ExtByteArrayOutputStream dst) {
-		pack_entry(version, ref_version, CHUNKED_MIDDLE_INSTANCE, dst);
+        try {
+            ExtByteArrayOutputStream bos1 = new ExtByteArrayOutputStream();
+            pack_entry(version, ref_version, CHUNKED_MIDDLE_INSTANCE, bos1);
+
+            ExtByteArrayOutputStream bos2 = new ExtByteArrayOutputStream();
+            pack_entry(version, ref_version, CHUNKED_MIDDLE2_INSTANCE, bos2);
+
+            ByteArrayOutputStream best = bos1;
+            if (bos2.size() < best.size()) best = bos2;
+
+            best.writeTo(dst);
+        } catch (IOException ioe) {
+            throw new RuntimeException(ioe); // Shouldn't happen.
+        }
 	}
 
 	//====================

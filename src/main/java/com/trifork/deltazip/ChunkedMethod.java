@@ -23,8 +23,8 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 	/** For some reason, zlib can only use 32K-262 bytes (=#7EFA) of a dictionary.
 	 * (See http://www.zlib.net/manual.html)
 	 * So we use a slightly smaller window size: */
-	private static final int WINDOW_SIZE = 0x7E00;
-	private static final int CHUNK_SIZE  = WINDOW_SIZE / 2;
+	public static final int WINDOW_SIZE = 0x7E00;
+	public static final int CHUNK_SIZE  = WINDOW_SIZE / 2;
 
 	/** For when we need to ensure the deflated ouput will fit in 64KB:
 	 * (From http://www.zlib.net/zlib_tech.html:
