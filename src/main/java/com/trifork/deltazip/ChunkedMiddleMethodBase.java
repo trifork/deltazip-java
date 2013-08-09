@@ -4,7 +4,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.zip.Inflater;
 
 abstract class ChunkedMiddleMethodBase extends DeltaZip.CompressionMethod {
@@ -12,8 +11,8 @@ abstract class ChunkedMiddleMethodBase extends DeltaZip.CompressionMethod {
 
 	public byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) throws IOException {
 		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		int prefix_len = varlen_decode(org);
-		int suffix_len = varlen_decode(org);
+		int prefix_len = DZUtil.varlen_decode(org);
+		int suffix_len = DZUtil.varlen_decode(org);
 
 		// Add prefix:
 		baos.write(ref_data, 0, prefix_len);
@@ -40,8 +39,8 @@ abstract class ChunkedMiddleMethodBase extends DeltaZip.CompressionMethod {
 		int suffix_len = longest_common_suffix(org, ref_data, prefix_len);
 		org.limit(org.limit() - suffix_len);
 
-		varlen_encode(prefix_len, dst);
-		varlen_encode(suffix_len, dst);
+		DZUtil.varlen_encode(prefix_len, dst);
+		DZUtil.varlen_encode(suffix_len, dst);
 		byte[] ref_middle = calcRefMiddle(ref_data, prefix_len, suffix_len);
 
 		chunked_method.compress(org.slice(), ref_middle, dst);
@@ -64,35 +63,5 @@ abstract class ChunkedMiddleMethodBase extends DeltaZip.CompressionMethod {
 
 	//======================================================================
 
-	public static void varlen_encode(int value, OutputStream out) throws IOException{
-		int shift = 0;
-// 		System.err.print("Encoding "+value+" as ");
-		while ((value >>> shift) >= 0x80) shift += 7;
-		for (; shift>=0; shift -= 7) {
-			byte b = (byte)((value >>> shift) & 0x7F);
-			if (shift>0) b |= 0x80;
-// 			System.err.print(" "+(b & 0xFF));
-			out.write(b);
-		}
-// 		System.err.println();
-	}
-
-	public static int varlen_decode(ByteBuffer in) throws IOException {
-		long acc = 0;
-		int bits = 0;
-		boolean more;
-// 		System.err.print("Decoding");
-		do {
-			int b = in.get();
-// 			System.err.print(" "+(b & 0xff));
-			more = (b < 0);
-			b &= 0x7F;
-			acc = (acc << 7) | (b & 0x7F);
-			bits += 7;
-			if (acc > Integer.MAX_VALUE) throw new IOException("Variable-length encoded integer is too large: "+acc);
-		} while (more);
-// 		System.err.println(" as "+acc);
-		return (int) acc;
-	}
 }
 

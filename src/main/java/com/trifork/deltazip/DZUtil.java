@@ -26,8 +26,9 @@ import com.jcraft.jzlib.ZOutputStream;
 import java.util.zip.Adler32;
 
 public abstract class DZUtil {
-	public static class ByteArrayAccess implements DeltaZip.Access {
-		private final byte[] data;
+
+    public static class ByteArrayAccess implements DeltaZip.Access {
+        private final byte[] data;
 
 		public ByteArrayAccess(byte[] data) {this.data = data;}
 
@@ -145,7 +146,33 @@ public abstract class DZUtil {
 		return (int)acc.getValue();
 	}
 
-	//==================== Deflate / Inflate ====================
+
+    public static void varlen_encode(int value, OutputStream out) throws IOException{
+        int shift = 0;
+        while ((value >>> shift) >= 0x80) shift += 7;
+        for (; shift>=0; shift -= 7) {
+            byte b = (byte)((value >>> shift) & 0x7F);
+            if (shift>0) b |= 0x80;
+            out.write(b);
+        }
+    }
+
+    public static int varlen_decode(ByteBuffer in) throws IOException {
+        long acc = 0;
+        int bits = 0;
+        boolean more;
+        do {
+            int b = in.get();
+            more = (b < 0);
+            b &= 0x7F;
+            acc = (acc << 7) | (b & 0x7F);
+            bits += 7;
+            if (acc > Integer.MAX_VALUE) throw new IOException("Variable-length encoded integer is too large: "+acc);
+        } while (more);
+        return (int) acc;
+    }
+
+    //==================== Deflate / Inflate ====================
 
 	public static class Dictionary {
 		final byte[] data;
