@@ -2,13 +2,9 @@ package com.trifork.deltazip;
 
 import java.util.Iterator;
 import java.util.zip.Inflater;
-import java.util.zip.InflaterOutputStream;
 
 import java.nio.ByteBuffer;
-import java.nio.channels.WritableByteChannel;
-import java.nio.channels.Channels;
 import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.io.OutputStream;
 import java.io.IOException;
 
@@ -291,37 +287,7 @@ public class DeltaZip {
 		dst.writeBigEndianInteger(tag, 4);
 	}
 
-
-	//========== ByteArrayOutputStream with 'blanks' support ==========
-
-	protected static class ExtByteArrayOutputStream extends ByteArrayOutputStream {
-		public int insertBlank(int len) {
-			int pos = count;
-			for (int i=0; i<len; i++) write(0);
-			return pos;
-		}
-
-		public void fillBlank(int pos, byte[] data) {
-			for (int i=0; i<data.length; i++) {
-				buf[pos+i] = data[i];
-			}
-		}
-
-		public void fillBlankWithBigEndianInteger(int pos, int value, int len) {
-			if (len>4) throw new IllegalArgumentException("length is > 4");
-			for (int i=len-1; i>=0; i--) {
-				buf[pos++] = (byte) (value >> (8*i));
-			}
-		}
-
-		public void writeBigEndianInteger(int value, int len) {
-			for (int i=len-1; i>=0; i--) {
-				write(value >> (8*i));
-			}
-		}
-	}
-
-	//==================== Compression methods =============================
+   //==================== Compression methods =============================
 	protected static abstract class CompressionMethod {
 		public abstract int methodNumber();
 		public abstract void compress(ByteBuffer org, byte[] ref_data, OutputStream dst) throws IOException;
