@@ -8,7 +8,9 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Random;
 
@@ -34,6 +36,30 @@ public class MetadataTest {
         }
     }
 
+    @Test
+    public void timestampsTest() throws IOException {
+        for (int i=1; i<=30; i++) {
+            long seconds = System.currentTimeMillis()/1000 + rnd.nextInt(1 << i);
+            Date ts = new Date(seconds * 1000);
+            testEncodeDecodeDate(ts);
+        }
+
+        for (int y=2001; y<=2130; y++) {
+            Calendar c = Calendar.getInstance();
+            c.set(Calendar.MILLISECOND, 0);
+            c.set(Calendar.YEAR, y);
+            testEncodeDecodeDate(c.getTime());
+        }
+    }
+
+    private void testEncodeDecodeDate(Date ts) throws IOException {
+        Metadata.Item item = new Metadata.Timestamp(ts);
+
+        List<Metadata.Item> outItems = testEncodeDecode(Collections.singletonList(item));
+        Metadata.Item out = outItems.get(0);
+        assertEquals(Metadata.Timestamp.class, out.getClass());
+        assertEquals(ts, ((Metadata.Timestamp)out).getDate());
+    }
 
     private byte[] randomBlob(int maxSize) {
         byte[] blob = new byte[rnd.nextInt(maxSize+1)];
@@ -41,7 +67,7 @@ public class MetadataTest {
         return blob;
     }
 
-    private void testEncodeDecode(List<Metadata.Item> items) throws IOException {
+    private List<Metadata.Item> testEncodeDecode(List<Metadata.Item> items) throws IOException {
         ByteArrayOutputStream os = new ByteArrayOutputStream();
         Metadata.pack(items, os);
         ByteBuffer src = ByteBuffer.wrap(os.toByteArray());
@@ -55,5 +81,7 @@ public class MetadataTest {
             //assertArrayEquals(a.getValue(), b.getValue()); // Much too slow
             assertTrue(Arrays.equals(a.getValue(), b.getValue()));
         }
+
+        return items2;
     }
 }

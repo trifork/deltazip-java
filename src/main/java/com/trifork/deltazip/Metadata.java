@@ -1,10 +1,14 @@
 package com.trifork.deltazip;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +36,7 @@ public class Metadata {
         }
     }
 
-    //START_OF_YEAR_2000_IN_GREGORIAN_SECONDS
+    public static final int START_OF_YEAR_2000_IN_UNIX_TIME = ((2000 - 1970) * 365 + 7) * 24 * 60 * 60;
 
     public static int name_to_keytag(String name) {
         return NAME_TO_KEYTAG.get(name);
@@ -79,7 +83,10 @@ public class Metadata {
     private static Item unpack_item(ByteBuffer packed_metadata) throws IOException {
         int keytag = DZUtil.varlen_decode(packed_metadata);
         byte[] value = DZUtil.readBytestring(packed_metadata);
-        return new Item(keytag, value);
+        switch (keytag) {
+            case TIMESTAMP_KEYTAG: return new Timestamp(value);
+            default: return new Item(keytag, value);
+        }
     }
 
     private static int computeMod255Checksum(byte[] data) {
@@ -112,6 +119,54 @@ public class Metadata {
 
         public byte[] getValue() {
             return value;
+        }
+    }
+
+    public static class Timestamp extends Item {
+        private final Date date_value;
+
+        public Timestamp(Date date) {
+            super(TIMESTAMP_KEYTAG, encodeDate(date));
+            this.date_value = date;
+        }
+
+        public Timestamp(byte[] bytes) {
+            super(TIMESTAMP_KEYTAG, bytes);
+            this.date_value = decodeDate(bytes);
+        }
+
+        public Date getDate() {
+            return date_value;
+        }
+
+        private static byte[] encodeDate(Date date) {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            long secondsSinceUnixEpoch = date.getTime() / 1000;
+            long secondsSinceY2K = secondsSinceUnixEpoch - START_OF_YEAR_2000_IN_UNIX_TIME;
+            if (secondsSinceY2K >= 1L << 32) throw new IllegalArgumentException("Date overflow: "+secondsSinceY2K);
+            try {
+                new DataOutputStream(baos).writeInt((int)secondsSinceY2K); // uint32
+            } catch (IOException ioe) {
+                throw new RuntimeException("Can't happen: "+ioe);
+            }
+            return baos.toByteArray();
+        }
+
+        private Date decodeDate(byte[] bytes) {
+            // We could in principle support 5-byte timestamps in the future, but right now we don't.
+            if (bytes.length != 4) {
+                throw new IllegalArgumentException("Timestamp field length error: expected 4 bytes, got "+bytes.length);
+            }
+
+            final long secondsSinceY2K;
+            try {
+                secondsSinceY2K = new DataInputStream(new ByteArrayInputStream(bytes)).readInt() & ((1L<<32)-1);
+            } catch (IOException ioe) {
+                throw new RuntimeException("Can't happen: "+ioe); // We did check the length, so shouldn't reach here.
+            }
+
+            long secondsSinceUnixEpoch = secondsSinceY2K + START_OF_YEAR_2000_IN_UNIX_TIME;
+            return new Date(secondsSinceUnixEpoch * 1000);
         }
     }
 }
