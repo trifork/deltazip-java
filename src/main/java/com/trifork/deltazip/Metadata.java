@@ -1,5 +1,7 @@
 package com.trifork.deltazip;
 
+import com.sun.org.apache.xpath.internal.operations.And;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -84,7 +86,9 @@ public class Metadata {
         int keytag = DZUtil.varlen_decode(packed_metadata);
         byte[] value = DZUtil.readBytestring(packed_metadata);
         switch (keytag) {
-            case TIMESTAMP_KEYTAG: return new Timestamp(value);
+            case TIMESTAMP_KEYTAG:  return new Timestamp(value);
+            case VERSION_ID_KEYTAG: return new VersionID(value);
+            case ANCESTOR_KEYTAG:   return new Ancestor(value);
             default: return new Item(keytag, value);
         }
     }
@@ -121,6 +125,7 @@ public class Metadata {
             return value;
         }
     }
+
 
     public static class Timestamp extends Item {
         private final Date date_value;
@@ -167,6 +172,18 @@ public class Metadata {
 
             long secondsSinceUnixEpoch = secondsSinceY2K + START_OF_YEAR_2000_IN_UNIX_TIME;
             return new Date(secondsSinceUnixEpoch * 1000);
+        }
+    }
+
+    public static class VersionID extends Item {
+        public VersionID(byte[] value) {
+            super(VERSION_ID_KEYTAG, value);
+        }
+    }
+
+    public static class Ancestor extends Item {
+        public Ancestor(byte[] value) {
+            super(ANCESTOR_KEYTAG, value);
         }
     }
 }

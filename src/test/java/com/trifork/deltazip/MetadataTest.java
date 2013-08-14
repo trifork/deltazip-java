@@ -61,6 +61,23 @@ public class MetadataTest {
         assertEquals(ts, ((Metadata.Timestamp)out).getDate());
     }
 
+    @Test
+    public void versionIDsTest() throws IOException {
+        for (int i=1; i<=100; i++) {
+            byte[] id = randomBlob(5*i);
+            List<Metadata.Item> outItems = testEncodeDecode(Collections.<Metadata.Item>singletonList(new Metadata.VersionID(id)));
+            Metadata.Item out = outItems.get(0);
+            assertEquals(Metadata.VersionID.class, out.getClass());
+        }
+
+        for (int i=1; i<=100; i++) {
+            byte[] id = randomBlob(5*i);
+            List<Metadata.Item> outItems = testEncodeDecode(Collections.<Metadata.Item>singletonList(new Metadata.Ancestor(id)));
+            Metadata.Item out = outItems.get(0);
+            assertEquals(Metadata.Ancestor.class, out.getClass());
+        }
+    }
+
     private byte[] randomBlob(int maxSize) {
         byte[] blob = new byte[rnd.nextInt(maxSize+1)];
         rnd.nextBytes(blob);
