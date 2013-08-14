@@ -147,6 +147,18 @@ public abstract class DZUtil {
 	}
 
 
+    public static void writeBytestring(OutputStream dest, byte[] value) throws IOException {
+        varlen_encode(value.length, dest);
+        dest.write(value);
+    }
+
+    public static byte[] readBytestring(ByteBuffer src) throws IOException {
+        int len = varlen_decode(src);
+        byte[] res = new byte[len];
+        src.get(res);
+        return res;
+    }
+
     public static void varlen_encode(int value, OutputStream out) throws IOException{
         int shift = 0;
         while ((value >>> shift) >= 0x80) shift += 7;
