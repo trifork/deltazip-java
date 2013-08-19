@@ -4,14 +4,21 @@ import java.nio.ByteBuffer;
 import java.io.IOException;
 import com.trifork.deltazip.DeltaZip.AppendSpecification;
 import com.trifork.deltazip.DZUtil.ByteArrayAccess;
+
+import java.sql.Date;
+import java.text.SimpleDateFormat;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Random;
 
 import org.junit.Test;
 import static junit.framework.Assert.*;
 
 public class DeltaZipTest {
+    private static final String LATIN1 = "ISO-8859-1";
 
-	@Test
+    @Test
 	public void test_read_known() throws Exception {
 		/* With zlib headers:
 		byte[] file = {32,0,0,17,0,0,14,120,
@@ -46,21 +53,54 @@ public class DeltaZipTest {
 		ByteBuffer exp_rev2 = ByteBuffer.wrap("Hello".getBytes("ISO-8859-1"));
 
 		System.err.println("two_revs 1...");
-		test_two_revs_with(two_revs1, exp_rev1, exp_rev2);
+		test_two_revs_with(two_revs1, exp_rev1, Collections.EMPTY_LIST, exp_rev2, Collections.EMPTY_LIST);
 		System.err.println("two_revs 2...");
-		test_two_revs_with(two_revs2, exp_rev1, exp_rev2);
+		test_two_revs_with(two_revs2, exp_rev1, Collections.EMPTY_LIST, exp_rev2, Collections.EMPTY_LIST);
 	}
 
-	public void test_two_revs_with(byte[] file, ByteBuffer exp_rev1, ByteBuffer exp_rev2) throws IOException {
+    @Test
+    public void test_read_known_metadata() throws Exception {
+        // Created with:
+        // ./deltazip create test.dz -mtimestamp='2013-08-19 14:37:30' -m'version_id=xyz' a -mtimestamp='2013-08-19 14:37:31' -m'ancestor=www' b
+        byte[] two_revs = {
+                (byte)0xce, (byte)0xb4, 0x7a, 0x11, 0x58, 0x00, 0x00, 0x18,
+                0x0f, 0x37, 0x02, (byte)0xf4, 0x0b, 0x01, 0x04, 0x19,
+                (byte)0xa4, (byte)0xea, 0x2a, 0x02, 0x03, 0x78, 0x79, 0x7a,
+                (byte)0xab, 0x02, 0x01, 0x00, 0x00, 0x06, 0x53, 0x28,
+                0x01, 0x12, (byte)0xa9, 0x00, 0x58, 0x00, 0x00, 0x18,
+                0x18, 0x00, 0x00, 0x16, 0x0a, 0x35, 0x02, 0x62,
+                0x0b, 0x01, 0x04, 0x19, (byte)0xa4, (byte)0xea, 0x2b, 0x03,
+                0x03, 0x77, 0x77, 0x77, (byte)0xaf, (byte)0xf3, (byte)0xc8, 0x4c,
+                (byte)0xcf, 0x48, 0x2d, (byte)0xe2, 0x02, 0x00, 0x18, 0x00,
+                0x00, 0x16};
+        SimpleDateFormat dfmt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z");
+
+        ByteBuffer exp_rev1 = ByteBuffer.wrap("Hi there\n".getBytes(LATIN1));
+        List<Metadata.Item> exp_md1 = Arrays.asList(
+                new Metadata.Timestamp(dfmt.parse("2013-08-19 14:37:30 UTC")),
+                new Metadata.VersionID("xyz".getBytes(LATIN1)));
+        ByteBuffer exp_rev2 = ByteBuffer.wrap("Higher\n".getBytes(LATIN1));
+        List<Metadata.Item> exp_md2 = Arrays.asList(
+                new Metadata.Timestamp(dfmt.parse("2013-08-19 14:37:31 UTC")),
+                new Metadata.Ancestor("www".getBytes(LATIN1)));
+
+        test_two_revs_with(two_revs, exp_rev2, exp_md2, exp_rev1, exp_md1);
+
+    }
+
+    public void test_two_revs_with(byte[] file,
+                                   ByteBuffer exp_rev1, List<Metadata.Item> exp_md1,
+                                   ByteBuffer exp_rev2, List<Metadata.Item> exp_md2)
+            throws IOException {
 		DeltaZip dz = new DeltaZip(new ByteArrayAccess(file));
 		ByteBuffer actual_rev1 = dz.get();
 		assertEquals(exp_rev1, actual_rev1);
-        assertEquals(dz.getMetadata().size(), 0);
+        assertEquals(dz.getMetadata(), exp_md1);
 
         dz.previous();
 		ByteBuffer actual_rev2  = dz.get();
 		assertEquals(exp_rev2, actual_rev2);
-        assertEquals(dz.getMetadata().size(), 0);
+        assertEquals(dz.getMetadata(), exp_md2);
 
         try {
 			dz.previous();

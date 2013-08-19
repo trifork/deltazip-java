@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -131,6 +132,25 @@ public class Metadata {
 
         public byte[] getValue() {
             return value;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            Item item = (Item) o;
+
+            return (keytag == item.keytag && Arrays.equals(value, item.value));
+        }
+
+        @Override
+        public int hashCode() {
+            int result = keytag;
+            result = 31 * result + (value != null ? Arrays.hashCode(value) : 0);
+            return result;
+        }
+
+        public String toString() {
+            return "<"+keytag+","+Arrays.toString(value)+">";
         }
     }
 
