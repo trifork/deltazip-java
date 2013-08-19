@@ -12,7 +12,11 @@ public class DeltaZip {
 
 	//==================== Constants =======================================
 
-	public static final int DELTAZIP_MAGIC_HEADER = 0xCEB47A10;
+	public static final int DELTAZIP_MAGIC_HEADER = 0xCEB47A00;
+	public static final int MACIC_MASK = 0xFFFFFF00;
+	public static final int VERSION_MASK = 0xFF;
+	public static final int VERSION_10 = 0x10;
+	public static final int VERSION_11 = 0x11;
 	public static final int FILE_HEADER_LENGTH = 4;
 
 	// Snapshot methods (0-3):
@@ -24,9 +28,8 @@ public class DeltaZip {
     public static final int METHOD_CHUNKED_MIDDLE2= 7;
 
 
-    private static final int VERSION_SIZE_BITS = 28;
-	private static final int VERSION_SIZE_LIMIT = 1 << VERSION_SIZE_BITS;
-
+    private static int METHOD_BIT_POSITION = 28;
+    private static int METADATA_FLAG_BIT_POSITION = 27;
 	protected static final CompressionMethod[] COMPRESSION_METHODS;
 	protected static final CompressionMethod UNCOMPRESSED_INSTANCE = new UncompressedMethod();
 	protected static final CompressionMethod DEFLATED_INSTANCE = new DeflatedMethod();
@@ -51,6 +54,7 @@ public class DeltaZip {
 	private final Inflater inflater = new Inflater(true);
 	private final Access access;
 
+    private Version    format_version;
 	private long       current_pos;
 	private int        current_size;
 	private int        current_method;
@@ -62,14 +66,17 @@ public class DeltaZip {
 	
 	public DeltaZip(Access access) throws IOException {
 		this.access = access;
-		check_magic_header();
+		this.format_version = check_magic_header();
 		set_cursor_at_end();
 	}
 
 	/** For cloning. */
 	private DeltaZip(DeltaZip org) {
+        // Archive-global fields:
 		this.access = org.access;
+        this.format_version = org.format_version;
 
+        // Version-local fields:
 		this.current_pos = org.current_pos;
 		this.current_size = org.current_size;
 		this.current_method = org.current_method;
@@ -115,7 +122,7 @@ public class DeltaZip {
 		ExtByteArrayOutputStream baos = new ExtByteArrayOutputStream();
 
 		// If the file is empty, add a header:
-		if (current_pos==0) baos.writeBigEndianInteger(DELTAZIP_MAGIC_HEADER, 4);
+		if (current_pos==0) baos.writeBigEndianInteger(DELTAZIP_MAGIC_HEADER | VERSION_11, 4);
 
 		ByteBuffer last_version = get();
 
@@ -135,7 +142,7 @@ public class DeltaZip {
 		ExtByteArrayOutputStream baos = new ExtByteArrayOutputStream();
 
 		// If the file is empty, add a header:
-		if (current_pos==0) baos.writeBigEndianInteger(DELTAZIP_MAGIC_HEADER, 4);
+		if (current_pos==0) baos.writeBigEndianInteger(DELTAZIP_MAGIC_HEADER | VERSION_11, 4);
 
 		ByteBuffer prev_version = get();
 
@@ -160,12 +167,18 @@ public class DeltaZip {
 
 	//==================== Internals =======================================
 
-	protected void check_magic_header() throws IOException {
+    /** @returns the archive format version number. */
+	protected Version check_magic_header() throws IOException {
 		long size = access.getSize();
-		if (size == 0) return; // OK (empty)
-		if (size < FILE_HEADER_LENGTH ||
-			read_magic_header() != DELTAZIP_MAGIC_HEADER)
+		if (size == 0) return Version.VERSION_11; // OK (empty)
+        int magic_header = read_magic_header();
+        if (size < FILE_HEADER_LENGTH ||
+			(magic_header & MACIC_MASK) != DELTAZIP_MAGIC_HEADER)
 			throw new IOException("Not a deltazip file (invalid header)");
+        int version = magic_header & VERSION_MASK;
+        if (version == VERSION_10) return Version.VERSION_10;
+        if (version == VERSION_11) return Version.VERSION_11;
+        throw new IOException("Not a readable deltazip file (unrecognized format version number)");
 	}
 
 	protected int read_magic_header() throws IOException {
@@ -193,8 +206,8 @@ public class DeltaZip {
 	protected void goto_previous_position_and_compute_current_version() throws IOException {
 		ByteBuffer tag_buf = access.pread(current_pos-ENVELOPE_TRAILER, ENVELOPE_TRAILER);
 		int tag = tag_buf.getInt(0);
-		int size = tag &~ (-1 << 28);
-		int method = (tag >> 28) & 15;
+		int size = tag &~ (-1 << format_version.versionSizeBits());
+		int method = (tag >> METHOD_BIT_POSITION) & 15;
 // 		System.err.println("DB| tag="+tag+" -> "+method+":"+size);
 
 		// Read envelope header:
@@ -281,8 +294,8 @@ public class DeltaZip {
 		int size_after = dst.size();
 		int length = size_after - size_before;
 
-		if (length >= VERSION_SIZE_LIMIT) throw new IllegalArgumentException("Version is too big to store");
-		int tag = (cm.methodNumber() << VERSION_SIZE_BITS) | length;
+		if (length >= format_version.versionSizeLimit()) throw new IllegalArgumentException("Version is too big to store");
+		int tag = (cm.methodNumber() << METHOD_BIT_POSITION) | length;
 		dst.fillBlankWithBigEndianInteger(tag_blank, tag, 4);
 		dst.writeBigEndianInteger(tag, 4);
 	}
