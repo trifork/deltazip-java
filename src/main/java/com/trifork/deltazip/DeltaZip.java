@@ -1,6 +1,9 @@
 package com.trifork.deltazip;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.zip.Inflater;
 
 import java.nio.ByteBuffer;
@@ -61,6 +64,7 @@ public class DeltaZip {
 	private byte[]     current_version;
 	private int        current_checksum;
 	private ByteBuffer exposed_current_version;
+    private List<Metadata.Item> current_metadata;
 
 	//==================== API ==========================================
 	
@@ -83,12 +87,18 @@ public class DeltaZip {
 		this.current_version = org.current_version;
 		this.current_checksum = org.current_checksum;
 		this.exposed_current_version = org.exposed_current_version;
+        this.current_metadata = org.current_metadata;
 	}
 
 	/** Get the revision pointed to by the cursor. */
 	public ByteBuffer get() {
 		return (exposed_current_version==null) ? null
 			: exposed_current_version.duplicate();
+	}
+
+	/** Get the metadata associated with revision pointed to by the cursor. */
+	public List<Metadata.Item> getMetadata() {
+		return Collections.unmodifiableList(current_metadata);
 	}
 
 	/** Tells whether there are older revisions. */
@@ -208,6 +218,8 @@ public class DeltaZip {
 		int tag = tag_buf.getInt(0);
 		int size = tag &~ (-1 << format_version.versionSizeBits());
 		int method = (tag >> METHOD_BIT_POSITION) & 15;
+        boolean has_metadata = format_version.supportsMetadata() &&
+                (tag & (1 << METADATA_FLAG_BIT_POSITION)) != 0;
 // 		System.err.println("DB| tag="+tag+" -> "+method+":"+size);
 
 		// Read envelope header:
@@ -217,8 +229,10 @@ public class DeltaZip {
 		int start_tag = data_buf.getInt();
 		if (start_tag != tag) throw new IOException("Data error - tag mismatch @ "+start_pos+";"+current_pos);
 		int adler32 = data_buf.getInt();
+        List<Metadata.Item> metadata =
+                has_metadata ? Metadata.unpack(data_buf) : Collections.EMPTY_LIST;
 
-		// Unpack:
+        // Unpack:
 		byte[] version = compute_current_version(method, data_buf, start_pos);
 
 		// Verify checksum:
@@ -235,7 +249,9 @@ public class DeltaZip {
 		this.current_version = version;
 		this.exposed_current_version = ByteBuffer.wrap(current_version).asReadOnlyBuffer();
 		this.current_checksum = actual_adler32;
+        this.current_metadata = metadata;
 	}
+
 	public static void dump(String s, byte[] buf) {
 		System.err.print(s);
 		System.err.print("<<");

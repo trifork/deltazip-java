@@ -66,6 +66,11 @@ public class Metadata {
     }
 
     public static List<Item> unpack(ByteBuffer src) throws IOException {
+        ByteBuffer packed_metadata = extract_metadata_src(src);
+        return unpack_from_src(packed_metadata);
+    }
+
+    private static ByteBuffer extract_metadata_src(ByteBuffer src) throws IOException {
         int start_pos = src.position();
         byte[] packed_metadata_bytes = DZUtil.readBytestring(src);
         ByteBuffer packed_metadata = ByteBuffer.wrap(packed_metadata_bytes);
@@ -74,7 +79,10 @@ public class Metadata {
         int end_pos = src.position();
         int chksum = computeMod255Checksum(src, start_pos, end_pos);
         if (chksum != 0) throw new IOException("Checksum failed - was "+chksum+", not zero");
+        return packed_metadata;
+    }
 
+    private static List<Item> unpack_from_src(ByteBuffer packed_metadata) throws IOException {
         List<Item> items = new ArrayList<Item>();
         while (packed_metadata.hasRemaining()) {
             items.add(unpack_item(packed_metadata));

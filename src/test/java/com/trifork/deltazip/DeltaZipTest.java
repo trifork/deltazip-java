@@ -55,10 +55,14 @@ public class DeltaZipTest {
 		DeltaZip dz = new DeltaZip(new ByteArrayAccess(file));
 		ByteBuffer actual_rev1 = dz.get();
 		assertEquals(exp_rev1, actual_rev1);
-		dz.previous();
+        assertEquals(dz.getMetadata().size(), 0);
+
+        dz.previous();
 		ByteBuffer actual_rev2  = dz.get();
 		assertEquals(exp_rev2, actual_rev2);
-		try {
+        assertEquals(dz.getMetadata().size(), 0);
+
+        try {
 			dz.previous();
 			throw new RuntimeException("Assertion failed");
 		} catch (Exception e) {}
