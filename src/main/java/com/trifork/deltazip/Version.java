@@ -27,4 +27,13 @@ public class Version {
         return metadata;
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        Version version = (Version) o;
+        return (contents.asReadOnlyBuffer().equals(version.contents.asReadOnlyBuffer())) &&
+                metadata.equals(version.metadata);
+    }
 }

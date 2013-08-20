@@ -113,20 +113,33 @@ public class DeltaZipTest {
 	@Test
 	public void test_add_get() throws Exception {
 		System.err.println("test_add_get...");
-		ByteBuffer rev1 = ByteBuffer.wrap("Hello".getBytes("ISO-8859-1"));
-		ByteBuffer rev1a = ByteBuffer.wrap("World!".getBytes("ISO-8859-1"));
-		ByteBuffer rev1b = ByteBuffer.wrap("Held!".getBytes("ISO-8859-1"));
-		ByteBuffer rev2 = ByteBuffer.wrap("Hello, World!".getBytes("ISO-8859-1"));
+		Version rev1  = new Version(ByteBuffer.wrap("Hello".getBytes(LATIN1)));
+		Version rev1a = new Version(ByteBuffer.wrap("World!".getBytes(LATIN1)));
+		Version rev1b = new Version(ByteBuffer.wrap("Held!".getBytes(LATIN1)));
+		Version rev2  = new Version(ByteBuffer.wrap("Hello, World!".getBytes(LATIN1)));
 
-		byte[] file0 = new byte[] {};
+        Version rev3  = new Version(ByteBuffer.wrap("Hello, World with timestamp!".getBytes(LATIN1)),
+                Metadata.items(new Metadata.Timestamp(new Date(1300000000))));
+        Version rev4  = new Version(ByteBuffer.wrap("Hello, World with many metadata".getBytes(LATIN1)),
+                Metadata.items(
+                        new Metadata.Timestamp(new Date(1400000000)),
+                        new Metadata.VersionID("Revision 4"),
+                        new Metadata.Ancestor("Revision 3")));
+
+        byte[] file0 = new byte[] {};
 
 		test_add_get_with(file0, rev1,rev2); // Would use 'prefix-copy' chunk.
 		test_add_get_with(file0, rev1a,rev2); // Would use 'offset-copy' chunk.
 		test_add_get_with(file0, rev1b,rev2); // Would use 'prefix-copy' and 'offset-copy'.
 		test_add_get_with(file0, rev2,rev1); // Would use 'deflate' chunk.
+
+		test_add_get_with(file0, rev2,rev3); // With and without metadata.
+		test_add_get_with(file0, rev3,rev2); // With and without metadata.
+		test_add_get_with(file0, rev3,rev4); // With different metadata.
+		test_add_get_with(file0, rev4,rev3); // With different metadata.
 	}
 	
-	public void test_add_get_with(byte[] file0, ByteBuffer rev1, ByteBuffer rev2) throws IOException {
+	public void test_add_get_with(byte[] file0, Version rev1, Version rev2) throws IOException {
 		ByteArrayAccess access0 = new ByteArrayAccess(file0);
 		DeltaZip dz0 = new DeltaZip(access0);
 		AppendSpecification app1 = dz0.add(rev1);
@@ -144,30 +157,30 @@ public class DeltaZipTest {
 
 		//==== Tests:
 		// ...of get():
-		assertEquals(dz1.get(), rev1);
+		assertEquals(dz1.getVersion(), rev1);
 
 		// ...of previous():
-		assertEquals(dz2.get(), rev2);
+		assertEquals(dz2.getVersion(), rev2);
 		dz2.previous();
-		assertEquals(dz2.get(), rev1);
+		assertEquals(dz2.getVersion(), rev1);
 
 		// ...of resetCursor():
 		dz2.resetCursor();
-		assertEquals(dz2.get(), rev2);
+		assertEquals(dz2.getVersion(), rev2);
 		dz2.resetCursor();
-		assertEquals(dz2.get(), rev2);
+		assertEquals(dz2.getVersion(), rev2);
 
 		// ...of clone():
 		DeltaZip dz2c = dz2.clone();
-		assertEquals(dz2c.get(), rev2);
+		assertEquals(dz2c.getVersion(), rev2);
 		dz2c.previous();
-		assertEquals(dz2c.get(), rev1);
+		assertEquals(dz2c.getVersion(), rev1);
 		// Now, dz2 should still be at the end:
-		assertEquals(dz2.get(), rev2);
+		assertEquals(dz2.getVersion(), rev2);
 		// And vice versa:
 		dz2c.resetCursor();
 		dz2.previous();
-		assertEquals(dz2c.get(), rev2);
+		assertEquals(dz2c.getVersion(), rev2);
 
 		try {
 			dz1.previous();

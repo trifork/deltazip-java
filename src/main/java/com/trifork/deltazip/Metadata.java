@@ -1,6 +1,7 @@
 package com.trifork.deltazip;
 
 import com.sun.org.apache.xpath.internal.operations.And;
+import com.sun.xml.internal.stream.writers.UTF8OutputStreamWriter;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -9,6 +10,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -40,9 +42,14 @@ public class Metadata {
     }
 
     public static final int START_OF_YEAR_2000_IN_UNIX_TIME = ((2000 - 1970) * 365 + 7) * 24 * 60 * 60;
+    private static final Charset UTF8 = Charset.forName("UTF-8");
 
     public static int name_to_keytag(String name) {
         return NAME_TO_KEYTAG.get(name);
+    }
+
+    public static List<Metadata.Item> items(Metadata.Item... items) {
+        return Arrays.asList(items);
     }
 
     public static void pack(List<Item> items, OutputStream dest) throws IOException {
@@ -207,11 +214,17 @@ public class Metadata {
         public VersionID(byte[] value) {
             super(VERSION_ID_KEYTAG, value);
         }
+        public VersionID(String value) {
+            super(VERSION_ID_KEYTAG, value.getBytes(UTF8));
+        }
     }
 
     public static class Ancestor extends Item {
         public Ancestor(byte[] value) {
             super(ANCESTOR_KEYTAG, value);
+        }
+        public Ancestor(String value) {
+            super(VERSION_ID_KEYTAG, value.getBytes(UTF8));
         }
     }
 }

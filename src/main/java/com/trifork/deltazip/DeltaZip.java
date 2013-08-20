@@ -137,7 +137,14 @@ public class DeltaZip {
         return add(new Version(new_version));
     }
 
-	/** Computes an AppendSpecification for adding a version.
+    /** Computes an AppendSpecification for adding a version.
+     *  Has the side effect of placing the cursor at the end.
+     */
+    public AppendSpecification add(ByteBuffer new_version, List<Metadata.Item> metadata) throws IOException {
+        return add(new Version(new_version, metadata));
+    }
+
+    /** Computes an AppendSpecification for adding a version.
 	 *  Has the side effect of placing the cursor at the end.
 	 */
 	public AppendSpecification add(Version new_version) throws IOException {
@@ -289,10 +296,18 @@ public class DeltaZip {
         int adler32 = DZUtil.computeAdler32(version_data);
         Gap tag_gap = dst.insertGap(4);
 		dst.writeBigEndianInteger(adler32, 4);
+        int size_before = dst.size();
 
-		int size_before = dst.size();
-        CompressionMethod selected_method = null;
-		try {
+		try { // Because of the (technical...) possibility of IOExceptions from ByteArrayOutputStream...
+            // Write metadata:
+            List<Metadata.Item> metadata = version.getMetadata();
+            final boolean has_metadata = !metadata.isEmpty();
+            if (has_metadata) {
+                if (!format_version.supportsMetadata()) throw new IllegalArgumentException("Archive format version does not support metadata.");
+                Metadata.pack(metadata, dst);
+            }
+
+            CompressionMethod selected_method = null;
             if (cms.length==1) { // Optimization: write directly.
                 selected_method = cms[0];
                 selected_method.compress(version_data.duplicate(), ref_version, dst);
@@ -316,20 +331,23 @@ public class DeltaZip {
                 // Write the most compact result out.
                 best_out.writeTo(dst);
             }
-		} catch (IOException ioe) {
+
+            // Compute length of envelope contents:
+            int size_after = dst.size();
+            int length = size_after - size_before;
+            if (length >= format_version.versionSizeLimit()) throw new IllegalArgumentException("Version is too big to store");
+
+            // Write tag at both ends of the envelope:
+            int tag = (selected_method.methodNumber() << METHOD_BIT_POSITION) | length;
+            if (has_metadata) tag |= (1 << METADATA_FLAG_BIT_POSITION);
+            tag_gap.fillWithBigEndianInteger(tag, 4);
+            dst.writeBigEndianInteger(tag, 4);
+
+        } catch (IOException ioe) {
 			// Shouldn't happen; it's a ByteArrayOutputStream.
 			throw new RuntimeException(ioe);
 		}
 
-        // Compute length of envelope contents:
-		int size_after = dst.size();
-		int length = size_after - size_before;
-		if (length >= format_version.versionSizeLimit()) throw new IllegalArgumentException("Version is too big to store");
-
-        // Write tag at both ends of the envelope:
-		int tag = (selected_method.methodNumber() << METHOD_BIT_POSITION) | length;
-		tag_gap.fillWithBigEndianInteger(tag, 4);
-		dst.writeBigEndianInteger(tag, 4);
 	}
 
    //==================== Compression methods =============================
