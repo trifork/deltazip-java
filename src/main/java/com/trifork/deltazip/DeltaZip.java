@@ -1,6 +1,5 @@
 package com.trifork.deltazip;
 
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -10,6 +9,8 @@ import java.nio.ByteBuffer;
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.io.IOException;
+
+import static com.trifork.deltazip.ExtByteArrayOutputStream.Gap;
 
 public class DeltaZip {
 
@@ -297,7 +298,7 @@ public class DeltaZip {
 	protected void pack_entry(ByteBuffer version, byte[] ref_version, CompressionMethod cm, ExtByteArrayOutputStream dst) {
 		int adler32 = DZUtil.computeAdler32(version);
 
-		int tag_blank = dst.insertBlank(4);
+        Gap tag_gap = dst.insertGap(4);
 		dst.writeBigEndianInteger(adler32, 4);
 
 		int size_before = dst.size();
@@ -312,7 +313,7 @@ public class DeltaZip {
 
 		if (length >= format_version.versionSizeLimit()) throw new IllegalArgumentException("Version is too big to store");
 		int tag = (cm.methodNumber() << METHOD_BIT_POSITION) | length;
-		dst.fillBlankWithBigEndianInteger(tag_blank, tag, 4);
+		tag_gap.fillWithBigEndianInteger(tag, 4);
 		dst.writeBigEndianInteger(tag, 4);
 	}
 
