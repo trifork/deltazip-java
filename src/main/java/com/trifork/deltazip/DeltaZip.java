@@ -272,38 +272,47 @@ public class DeltaZip {
 
 	//====================
 
+    private final CompressionMethod[] SNAPSHOT_METHODS = {DEFLATED_INSTANCE};
 	protected void pack_snapshot(ByteBuffer version, ExtByteArrayOutputStream dst) {
-		pack_entry(version, null, DEFLATED_INSTANCE, dst);
+		pack_entry(version, null, SNAPSHOT_METHODS, dst);
 	}
 
-	protected void pack_delta(ByteBuffer version, byte[] ref_version, ExtByteArrayOutputStream dst) {
-        try {
-            ExtByteArrayOutputStream bos1 = new ExtByteArrayOutputStream();
-            pack_entry(version, ref_version, CHUNKED_MIDDLE_INSTANCE, bos1);
-
-            ExtByteArrayOutputStream bos2 = new ExtByteArrayOutputStream();
-            pack_entry(version, ref_version, CHUNKED_MIDDLE2_INSTANCE, bos2);
-
-            ByteArrayOutputStream best = bos1;
-            if (bos2.size() < best.size()) best = bos2;
-
-            best.writeTo(dst);
-        } catch (IOException ioe) {
-            throw new RuntimeException(ioe); // Shouldn't happen.
-        }
+    private final CompressionMethod[] DELTA_METHODS = {CHUNKED_MIDDLE_INSTANCE, CHUNKED_MIDDLE2_INSTANCE};
+    protected void pack_delta(ByteBuffer version, byte[] ref_version, ExtByteArrayOutputStream dst) {
+        pack_entry(version, ref_version, DELTA_METHODS, dst);
 	}
 
 	//====================
 
-	protected void pack_entry(ByteBuffer version, byte[] ref_version, CompressionMethod cm, ExtByteArrayOutputStream dst) {
+	protected void pack_entry(ByteBuffer version, byte[] ref_version, CompressionMethod[] cms, ExtByteArrayOutputStream dst) {
 		int adler32 = DZUtil.computeAdler32(version);
 
         Gap tag_gap = dst.insertGap(4);
 		dst.writeBigEndianInteger(adler32, 4);
 
 		int size_before = dst.size();
+        CompressionMethod selected_method = null;
 		try {
-			cm.compress(version.duplicate(), ref_version, dst);
+            if (cms.length==1) { // Optimization: write directly.
+                selected_method = cms[0];
+                selected_method.compress(version.duplicate(), ref_version, dst);
+            } else { // Try each and select most compact result
+                ExtByteArrayOutputStream best_out = new ExtByteArrayOutputStream();
+                ExtByteArrayOutputStream candidate_out = new ExtByteArrayOutputStream();
+                int best_size = Integer.MAX_VALUE;
+                for (CompressionMethod cm : cms) {
+                    candidate_out.reset();
+                    cm.compress(version.duplicate(), ref_version, candidate_out);
+                    int cand_size = candidate_out.size();
+                    if (cand_size < best_size) {
+                        // Swap 'best' and 'candidate':
+                        ExtByteArrayOutputStream tmp=best_out; best_out=candidate_out; candidate_out=tmp;
+                        best_size = cand_size;
+                        selected_method = cm;
+                    }
+                }
+                best_out.writeTo(dst);
+            }
 		} catch (IOException ioe) {
 			// Shouldn't happen; it's a ByteArrayOutputStream.
 			throw new RuntimeException(ioe);
@@ -312,7 +321,7 @@ public class DeltaZip {
 		int length = size_after - size_before;
 
 		if (length >= format_version.versionSizeLimit()) throw new IllegalArgumentException("Version is too big to store");
-		int tag = (cm.methodNumber() << METHOD_BIT_POSITION) | length;
+		int tag = (selected_method.methodNumber() << METHOD_BIT_POSITION) | length;
 		tag_gap.fillWithBigEndianInteger(tag, 4);
 		dst.writeBigEndianInteger(tag, 4);
 	}
