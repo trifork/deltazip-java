@@ -90,7 +90,13 @@ public class DeltaZip {
         this.current_metadata = org.current_metadata;
 	}
 
-	/** Get the revision pointed to by the cursor. */
+    /** Get the revision pointed to by the cursor. */
+    public Version getVersion() {
+        ByteBuffer contents = get();
+        return contents==null ? null : new Version(contents, getMetadata());
+    }
+
+    /** Get the revision pointed to by the cursor. */
 	public ByteBuffer get() {
 		return (exposed_current_version==null) ? null
 			: exposed_current_version.duplicate();
@@ -98,7 +104,7 @@ public class DeltaZip {
 
 	/** Get the metadata associated with revision pointed to by the cursor. */
 	public List<Metadata.Item> getMetadata() {
-		return Collections.unmodifiableList(current_metadata);
+		return current_metadata==null ? null : Collections.unmodifiableList(current_metadata);
 	}
 
 	/** Tells whether there are older revisions. */
@@ -128,38 +134,32 @@ public class DeltaZip {
 	 *  Has the side effect of placing the cursor at the end.
 	 */
 	public AppendSpecification add(ByteBuffer new_version) throws IOException {
-		set_cursor_at_end();
-		ExtByteArrayOutputStream baos = new ExtByteArrayOutputStream();
+        return add(new Version(new_version));
+    }
 
-		// If the file is empty, add a header:
-		if (current_pos==0) baos.writeBigEndianInteger(DELTAZIP_MAGIC_HEADER | VERSION_11, 4);
-
-		ByteBuffer last_version = get();
-
-		if (last_version != null) {
-			pack_delta(last_version, DZUtil.allToByteArray(new_version), baos);
-		}
-		pack_snapshot(new_version, baos);
-
-		return new AppendSpecification(current_pos, baos.toByteArray());
+	/** Computes an AppendSpecification for adding a version.
+	 *  Has the side effect of placing the cursor at the end.
+	 */
+	public AppendSpecification add(Version new_version) throws IOException {
+        return add(Collections.singletonList(new_version).iterator());
 	}
 
 	/** Computes an AppendSpecification for adding a version.
 	 *  Has the side effect of placing the cursor at the end.
 	 */
-	public AppendSpecification add(Iterator<ByteBuffer> versions_to_add) throws IOException {
+	public AppendSpecification add(Iterator<Version> versions_to_add) throws IOException {
 		set_cursor_at_end();
 		ExtByteArrayOutputStream baos = new ExtByteArrayOutputStream();
 
 		// If the file is empty, add a header:
 		if (current_pos==0) baos.writeBigEndianInteger(DELTAZIP_MAGIC_HEADER | VERSION_11, 4);
 
-		ByteBuffer prev_version = get();
+        Version prev_version = getVersion();
 
 		while (versions_to_add.hasNext()) {
-			ByteBuffer cur = versions_to_add.next();
+			Version cur = versions_to_add.next();
 			if (prev_version != null) {
-				pack_delta(prev_version, DZUtil.allToByteArray(cur), baos);
+				pack_delta(prev_version, DZUtil.allToByteArray(cur.getContents()), baos);
 			}
 			prev_version = cur;
 		}
@@ -272,20 +272,21 @@ public class DeltaZip {
 	//====================
 
     private final CompressionMethod[] SNAPSHOT_METHODS = {DEFLATED_INSTANCE};
-	protected void pack_snapshot(ByteBuffer version, ExtByteArrayOutputStream dst) {
+	protected void pack_snapshot(Version version, ExtByteArrayOutputStream dst) {
 		pack_entry(version, null, SNAPSHOT_METHODS, dst);
 	}
 
     private final CompressionMethod[] DELTA_METHODS = {CHUNKED_MIDDLE_INSTANCE, CHUNKED_MIDDLE2_INSTANCE};
-    protected void pack_delta(ByteBuffer version, byte[] ref_version, ExtByteArrayOutputStream dst) {
+    protected void pack_delta(Version version, byte[] ref_version, ExtByteArrayOutputStream dst) {
         pack_entry(version, ref_version, DELTA_METHODS, dst);
 	}
 
 	//====================
 
-	protected void pack_entry(ByteBuffer version, byte[] ref_version, CompressionMethod[] cms, ExtByteArrayOutputStream dst) {
+	protected void pack_entry(Version version, byte[] ref_version, CompressionMethod[] cms, ExtByteArrayOutputStream dst) {
         // Write start of envelope:
-		int adler32 = DZUtil.computeAdler32(version);
+        ByteBuffer version_data = version.getContents();
+        int adler32 = DZUtil.computeAdler32(version_data);
         Gap tag_gap = dst.insertGap(4);
 		dst.writeBigEndianInteger(adler32, 4);
 
@@ -294,14 +295,14 @@ public class DeltaZip {
 		try {
             if (cms.length==1) { // Optimization: write directly.
                 selected_method = cms[0];
-                selected_method.compress(version.duplicate(), ref_version, dst);
+                selected_method.compress(version_data.duplicate(), ref_version, dst);
             } else { // Try each method and select the most compact result.
                 ExtByteArrayOutputStream best_out = new ExtByteArrayOutputStream();
                 ExtByteArrayOutputStream candidate_out = new ExtByteArrayOutputStream();
                 int best_size = Integer.MAX_VALUE;
                 for (CompressionMethod cm : cms) {
                     candidate_out.reset();
-                    cm.compress(version.duplicate(), ref_version, candidate_out);
+                    cm.compress(version_data.duplicate(), ref_version, candidate_out);
                     int cand_size = candidate_out.size();
                     if (cand_size < best_size) { // Candidate is hitherto best.
                         // Swap 'best_out' and 'candidate_out':

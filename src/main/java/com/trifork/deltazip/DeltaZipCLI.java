@@ -137,7 +137,7 @@ public abstract class DeltaZipCLI {
 		fa.close();
 	}
 
-	protected static void add_to_file(FileAccess fa, Iterator<ByteBuffer> to_add) throws IOException {
+	protected static void add_to_file(FileAccess fa, Iterator<Version> to_add) throws IOException {
 		DeltaZip dz = new DeltaZip(fa);
 		AppendSpecification app_spec = dz.add(to_add);
 		fa.applyAppendSpec(app_spec);
@@ -176,16 +176,16 @@ public abstract class DeltaZipCLI {
 		}
 	}
 
-	protected static Iterator<ByteBuffer> createFileIterator(final String[] filenames, final int start_index) {
-		return new Iterator<ByteBuffer>() {
+	protected static Iterator<Version> createFileIterator(final String[] filenames, final int start_index) {
+		return new Iterator<Version>() {
 			int pos = start_index;
 
 			public boolean hasNext() {return pos < filenames.length;}
 
-			public ByteBuffer next() {
+			public Version next() {
 				String filename = filenames[pos++];
 				try {
-					return fileToByteBuffer(filename);
+					return new Version(fileToByteBuffer(filename));
 				} catch (IOException ioe) {
 					throw new RuntimeException(ioe);
 				}
