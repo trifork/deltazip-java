@@ -36,4 +36,12 @@ public class Version {
         return (contents.asReadOnlyBuffer().equals(version.contents.asReadOnlyBuffer())) &&
                 metadata.equals(version.metadata);
     }
+
+    @Override
+    public String toString() {
+        return "Version{" +
+                "contents=" + contents +
+                ", metadata=" + metadata +
+                '}';
+    }
 }

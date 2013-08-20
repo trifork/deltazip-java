@@ -102,11 +102,11 @@ public class Metadata {
         int keytag = DZUtil.varlen_decode(packed_metadata);
         byte[] value = DZUtil.readBytestring(packed_metadata);
         switch (keytag) {
-            case TIMESTAMP_KEYTAG:  return new Timestamp(value);
+            case TIMESTAMP_KEYTAG:  if (value.length==4) return new Timestamp(value); else break;
             case VERSION_ID_KEYTAG: return new VersionID(value);
             case ANCESTOR_KEYTAG:   return new Ancestor(value);
-            default: return new Item(keytag, value);
         }
+        return new Item(keytag, value);
     }
 
     private static int computeMod255Checksum(byte[] data) {

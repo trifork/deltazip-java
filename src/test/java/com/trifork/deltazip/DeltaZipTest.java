@@ -7,6 +7,7 @@ import com.trifork.deltazip.DZUtil.ByteArrayAccess;
 
 import java.sql.Date;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -304,12 +305,65 @@ public class DeltaZipTest {
 			assert(! dz.hasPrevious());
 		}
 		System.err.println(">");
-
 	}
 
 	//======================================================================
 
-	public static String toString(ByteBuffer buf) {
+    @Test
+    public void totally_random_test_with_metadata() throws IOException {
+        final Random rnd = new Random();
+
+        { // Few and small.
+            Version[] versions = new Version[100];
+            for (int i=0; i<versions.length; i++)
+                versions[i] = createRandomVersion(100, rnd, 3, 10, 10);
+
+            series_test_with(versions);
+        }
+
+        { // Many and large.
+            Version[] versions = new Version[40];
+            for (int i=0; i<versions.length; i++)
+                versions[i] = createRandomVersion(1000, rnd, 10, 1000000, 10000);
+
+            series_test_with(versions);
+        }
+    }
+
+    public void series_test_with(Version[] versions) throws IOException {
+        byte[] file = new byte[0];
+
+        System.err.print("<");
+        // Add versions:
+        for (int i=0; i<versions.length; i++) {
+            System.err.print(".");
+            ByteArrayAccess access = new ByteArrayAccess(file);
+            DeltaZip dz = new DeltaZip(access);
+            AppendSpecification app_spec =
+                    dz.add(versions[i]);
+            file = access.applyAppendSpec(app_spec);
+        }
+
+        {// Verify contents:
+            ByteArrayAccess access = new ByteArrayAccess(file);
+            DeltaZip dz = new DeltaZip(access);
+            for (int i=versions.length-1; i>=0; i--) {
+                System.err.print(",");
+                assertEquals(dz.getVersion(), versions[i]);
+                if (i>0) {
+                    assert(dz.hasPrevious());
+                    dz.previous();
+                }
+            }
+            assert(! dz.hasPrevious());
+        }
+        System.err.println(">");
+
+    }
+
+    //======================================================================
+
+    public static String toString(ByteBuffer buf) {
 		String r = new String(DZUtil.allToByteArray(buf.duplicate()));
 		return r;
 	}
@@ -328,9 +382,26 @@ public class DeltaZipTest {
 		System.err.println(">>");
 	}
 
-	public static ByteBuffer createRandomBinary(int length, Random rnd) {
-		byte[] buf = new byte[length];
-		rnd.nextBytes(buf);
+    public static Version createRandomVersion(int content_length, Random rnd,
+                                              int avg_metadata_cnt, int max_metadata_keytag,
+                                              int max_metadata_len)
+    {
+        List<Metadata.Item> metadata = new ArrayList<Metadata.Item>();
+        while (rnd.nextInt(avg_metadata_cnt) > 0) {
+            metadata.add(new Metadata.Item(1+rnd.nextInt(max_metadata_keytag),
+                    createRandomBlob(rnd.nextInt(max_metadata_len), rnd)));
+        }
+        return new Version(createRandomBinary(content_length, rnd), metadata);
+    }
+
+    public static ByteBuffer createRandomBinary(int length, Random rnd) {
+        byte[] buf = createRandomBlob(length, rnd);
 		return ByteBuffer.wrap(buf).asReadOnlyBuffer();
 	}
+
+    private static byte[] createRandomBlob(int length, Random rnd) {
+        byte[] buf = new byte[length];
+        rnd.nextBytes(buf);
+        return buf;
+    }
 }
