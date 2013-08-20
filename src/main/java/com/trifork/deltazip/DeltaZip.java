@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.zip.Inflater;
 
 import java.nio.ByteBuffer;
-import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.io.IOException;
 
@@ -58,7 +57,7 @@ public class DeltaZip {
 	private final Inflater inflater = new Inflater(true);
 	private final Access access;
 
-    private Version    format_version;
+    private FormatVersion format_version;
 	private long       current_pos;
 	private int        current_size;
 	private int        current_method;
@@ -179,16 +178,16 @@ public class DeltaZip {
 	//==================== Internals =======================================
 
     /** @returns the archive format version number. */
-	protected Version check_magic_header() throws IOException {
+	protected FormatVersion check_magic_header() throws IOException {
 		long size = access.getSize();
-		if (size == 0) return Version.VERSION_11; // OK (empty)
+		if (size == 0) return FormatVersion.VERSION_11; // OK (empty)
         int magic_header = read_magic_header();
         if (size < FILE_HEADER_LENGTH ||
 			(magic_header & MACIC_MASK) != DELTAZIP_MAGIC_HEADER)
 			throw new IOException("Not a deltazip file (invalid header)");
         int version = magic_header & VERSION_MASK;
-        if (version == VERSION_10) return Version.VERSION_10;
-        if (version == VERSION_11) return Version.VERSION_11;
+        if (version == VERSION_10) return FormatVersion.VERSION_10;
+        if (version == VERSION_11) return FormatVersion.VERSION_11;
         throw new IOException("Not a readable deltazip file (unrecognized format version number)");
 	}
 
