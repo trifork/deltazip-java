@@ -1,8 +1,5 @@
 package com.trifork.deltazip;
 
-import com.sun.org.apache.xpath.internal.operations.And;
-import com.sun.xml.internal.stream.writers.UTF8OutputStreamWriter;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -42,10 +39,13 @@ public class Metadata {
     }
 
     public static final int START_OF_YEAR_2000_IN_UNIX_TIME = ((2000 - 1970) * 365 + 7) * 24 * 60 * 60;
-    private static final Charset UTF8 = Charset.forName("UTF-8");
+    public static final Charset UTF8 = Charset.forName("UTF-8");
 
-    public static int name_to_keytag(String name) {
+    public static Integer name_to_keytag(String name) {
         return NAME_TO_KEYTAG.get(name);
+    }
+    public static String keytag_to_name(int keytag) {
+        return (keytag>=0 && keytag<KEYTAG_TO_NAME.length) ? KEYTAG_TO_NAME[keytag] : null;
     }
 
     public static List<Metadata.Item> items(Metadata.Item... items) {

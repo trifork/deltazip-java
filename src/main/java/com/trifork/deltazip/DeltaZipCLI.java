@@ -64,19 +64,20 @@ public abstract class DeltaZipCLI {
 		FileAccess fa = openDZFile(args[1]);
 		DeltaZip dz = new DeltaZip(fa);
 
-		System.out.println("Nr:\tMethod\tCompSize\tVersionSize\tChecksum");
+		System.out.println("Nr:\tMethod\tCompSize\tVersionSize\tChecksum\tMetadata");
 
 		if (dz.get() == null) return;
 
 		int nr = 0;
 		for (;; nr++) {
 			String line =
-				String.format("%d:\t"+"M%d\t"+"%8d\t"+"%8d\t"+"%8x",
+				String.format("%d:\t"+"M%d\t"+"%8d\t"+"%8d\t"+"%8x\t%s",
 							  (-nr),
 							  dz.getCurrentMethod(),
 							  dz.getCurrentCompSize(),
 							  dz.getCurrentRawSize(),
-							  dz.getCurrentChecksum());
+							  dz.getCurrentChecksum(),
+                              metadataToString(dz.getMetadata()));
 			System.out.println(line);
 			
 			if (dz.hasPrevious()) {
@@ -88,7 +89,30 @@ public abstract class DeltaZipCLI {
 		fa.close();
 	}
 
-	//====================
+    private static String metadataToString(List<Metadata.Item> metadata) {
+        StringBuilder sb = new StringBuilder();
+        SimpleDateFormat dfmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");//spec for RFC3339
+        dfmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+        for (Metadata.Item item : metadata) {
+            if (sb.length() > 0) sb.append("; ");
+            int keytag = item.getNumericKeytag();
+            String key_str = Metadata.keytag_to_name(keytag);
+            if (key_str==null) key_str = String.valueOf(keytag);
+
+            String value_str;
+            if (item instanceof Metadata.Timestamp) {
+                key_str = "timestamp";
+                value_str = dfmt.format(((Metadata.Timestamp)item).getDate());
+            } else {
+                value_str = new String(item.getValue(), Metadata.UTF8);
+            }
+
+            sb.append(key_str).append("=\"").append(value_str).append('"');
+        }
+        return sb.toString();
+    }
+
+    //====================
 	public static void do_get(String[] args) throws IOException {
 		if (args.length < 2) {usage(); System.exit(1);}
 		int rev_nr = 0;
@@ -192,6 +216,9 @@ public abstract class DeltaZipCLI {
                 while (pos < args.length && args[pos].startsWith("-m")) {
                     String md_spec = args[pos++];
                     int eq_pos = md_spec.indexOf("=");
+                    if (eq_pos < 0) {
+                        throw new IllegalArgumentException("Metadata specification contains no \"=\" sign");
+                    }
                     String md_key = md_spec.substring(2,eq_pos);
                     String md_value = md_spec.substring(eq_pos+1);
                     res.add(cli_arg_to_metadata_item(md_key, md_value));
