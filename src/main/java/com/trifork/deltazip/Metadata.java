@@ -133,6 +133,10 @@ public class Metadata {
             this.value = value;
         }
 
+        public Item(int keytag, String value) {
+            this(keytag, value.getBytes(UTF8));
+        }
+
         public int getNumericKeytag() {
             return keytag;
         }
@@ -211,20 +215,14 @@ public class Metadata {
     }
 
     public static class VersionID extends Item {
-        public VersionID(byte[] value) {
-            super(VERSION_ID_KEYTAG, value);
-        }
-        public VersionID(String value) {
-            super(VERSION_ID_KEYTAG, value.getBytes(UTF8));
-        }
+        public static final int KEYTAG = VERSION_ID_KEYTAG;
+        public VersionID(byte[] value) { super(KEYTAG, value); }
+        public VersionID(String value) { super(KEYTAG, value); }
     }
 
     public static class Ancestor extends Item {
-        public Ancestor(byte[] value) {
-            super(ANCESTOR_KEYTAG, value);
-        }
-        public Ancestor(String value) {
-            super(VERSION_ID_KEYTAG, value.getBytes(UTF8));
-        }
+        public static final int KEYTAG = ANCESTOR_KEYTAG;
+        public Ancestor(byte[] value) { super(KEYTAG, value); }
+        public Ancestor(String value) { super(KEYTAG, value); }
     }
 }

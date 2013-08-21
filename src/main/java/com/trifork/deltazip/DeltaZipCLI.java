@@ -7,7 +7,13 @@ import java.io.IOException;
 import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.nio.ByteBuffer;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.Iterator;
+import java.util.List;
+import java.util.TimeZone;
 
 public abstract class DeltaZipCLI {
 
@@ -176,22 +182,69 @@ public abstract class DeltaZipCLI {
 		}
 	}
 
-	protected static Iterator<Version> createFileIterator(final String[] filenames, final int start_index) {
+	protected static Iterator<Version> createFileIterator(final String[] args, final int start_index) {
 		return new Iterator<Version>() {
 			int pos = start_index;
+            List<Metadata.Item> metadata_for_next_filename = eatMetadata();
 
-			public boolean hasNext() {return pos < filenames.length;}
+            private List<Metadata.Item> eatMetadata() {
+                List<Metadata.Item> res = new ArrayList<Metadata.Item>();
+                while (pos < args.length && args[pos].startsWith("-m")) {
+                    String md_spec = args[pos++];
+                    int eq_pos = md_spec.indexOf("=");
+                    String md_key = md_spec.substring(2,eq_pos);
+                    String md_value = md_spec.substring(eq_pos+1);
+                    res.add(cli_arg_to_metadata_item(md_key, md_value));
+                }
+                if (pos >= args.length && !res.isEmpty()) {
+                    throw new IllegalArgumentException("Parameter list ends with metadata, not with a version filename");
+                }
+                return res;
+            }
+
+            public boolean hasNext() {return pos < args.length;}
 
 			public Version next() {
-				String filename = filenames[pos++];
-				try {
-					return new Version(fileToByteBuffer(filename));
-				} catch (IOException ioe) {
-					throw new RuntimeException(ioe);
-				}
-			}
+				String filename = args[pos++];
+                try {
+                    return new Version(fileToByteBuffer(filename), metadata_for_next_filename);
+                } catch (IOException ioe) {
+                    throw new RuntimeException(ioe);
+                } finally {
+                    metadata_for_next_filename = eatMetadata();
+                }
+            }
 			public void remove() {throw new UnsupportedOperationException();}
 		};
 	}
+
+    private static Metadata.Item cli_arg_to_metadata_item(String key_str, String value_str) {
+        Integer keytag_opt = Metadata.name_to_keytag(key_str);
+        final int keytag;
+        if (keytag_opt != null) { // Named keytag.
+            keytag = keytag_opt.intValue();
+            if (keytag == Metadata.TIMESTAMP_KEYTAG) {
+                SimpleDateFormat dfmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");//spec for RFC3339
+                dfmt.setLenient(true);
+                dfmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+                Date d;
+                try {
+                    d = dfmt.parse(value_str);
+                } catch (ParseException e) {
+                    throw new IllegalArgumentException("Bad metadata timestamp format: \""+value_str+"\"");
+                }
+                return new Metadata.Timestamp(d);
+            } else {
+                return new Metadata.Item(keytag, value_str);
+            }
+        } else { // Numeric keytag?
+            try {
+                keytag = Integer.parseInt(key_str);
+            } catch (NumberFormatException nfe) {
+                throw new IllegalArgumentException("Unrecognized metadata key: \""+key_str+"\"");
+            }
+            return new Metadata.Item(keytag, value_str);
+        }
+    }
 
 }
