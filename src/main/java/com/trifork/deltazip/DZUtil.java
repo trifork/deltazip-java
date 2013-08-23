@@ -194,6 +194,7 @@ public abstract class DZUtil {
 			this.data = data;
 			this.off = off;
 			this.len = len;
+            if (off<0 || len < 0 || off+len > data.length) throw new IllegalArgumentException("Bad dictionary slice: off="+off+" len="+len+" bytes="+data.length);
 		}
 
 		public byte[] withZeroOffset() {
