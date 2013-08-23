@@ -10,6 +10,12 @@ public class Version {
     private final ByteBuffer contents;
     private final List<Metadata.Item> metadata;
 
+    /** Convenience constructor. */
+    public Version(byte[] contents) { this(ByteBuffer.wrap(contents)); }
+    /** Convenience constructor. */
+    public Version(byte[] contents, List<Metadata.Item> metadata) { this(ByteBuffer.wrap(contents), metadata); }
+
+        /** Convenience constructor. */
     public Version(ByteBuffer contents) {
         this(contents, Collections.<Metadata.Item>emptyList());
     }

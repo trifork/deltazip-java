@@ -151,15 +151,26 @@ public class DeltaZip {
         return add(Collections.singletonList(new_version).iterator());
 	}
 
-	/** Computes an AppendSpecification for adding a version.
-	 *  Has the side effect of placing the cursor at the end.
-	 */
+    /** Computes an AppendSpecification for adding a version.
+     *  Has the side effect of placing the cursor at the end.
+     */
+    public AppendSpecification add(Iterable<Version> versions_to_add) throws IOException {
+        return add(versions_to_add.iterator());
+    }
+
+    /** Computes an AppendSpecification for adding a version.
+     *  Has the side effect of placing the cursor at the end.
+     */
 	public AppendSpecification add(Iterator<Version> versions_to_add) throws IOException {
 		set_cursor_at_end();
 		ExtByteArrayOutputStream baos = new ExtByteArrayOutputStream();
 
 		// If the file is empty, add a header:
 		if (current_pos==0) baos.writeBigEndianInteger(DELTAZIP_MAGIC_HEADER | VERSION_11, 4);
+
+        if (!versions_to_add.hasNext()) { // Handle degenerate case.
+            return new AppendSpecification(access.getSize(), baos.toByteArray());
+        }
 
         Version prev_version = getVersion();
 

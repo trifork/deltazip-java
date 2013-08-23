@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Random;
 
 import org.junit.Test;
-import static junit.framework.Assert.*;
+import static org.junit.Assert.*;
 
 public class DeltaZipTest {
     private static final String LATIN1 = "ISO-8859-1";
@@ -139,8 +139,8 @@ public class DeltaZipTest {
 		test_add_get_with(file0, rev3,rev4); // With different metadata.
 		test_add_get_with(file0, rev4,rev3); // With different metadata.
 	}
-	
-	public void test_add_get_with(byte[] file0, Version rev1, Version rev2) throws IOException {
+
+    private void test_add_get_with(byte[] file0, Version rev1, Version rev2) throws IOException {
 		ByteArrayAccess access0 = new ByteArrayAccess(file0);
 		DeltaZip dz0 = new DeltaZip(access0);
 		AppendSpecification app1 = dz0.add(rev1);
@@ -193,7 +193,47 @@ public class DeltaZipTest {
 		} catch (Exception e) {}
 	}
 
-	@Test
+    @Test
+    public void test_add_empty() throws Exception {
+        byte[] file0 = new byte[] {};
+        ByteArrayAccess access0 = new ByteArrayAccess(file0);
+        DeltaZip dz0 = new DeltaZip(access0);
+        assertNull(dz0.get());
+
+        // Add zero versions to the empty archive (without header):
+        AppendSpecification app1 = dz0.add(Collections.<Version>emptyList().iterator());
+        byte[] file1 = access0.applyAppendSpec(app1);
+        assertEquals("Only header", 4, file1.length);
+
+        // Add zero versions to the empty archive (with header):
+        ByteArrayAccess access1 = new ByteArrayAccess(file1);
+        DeltaZip dz1 = new DeltaZip(access1);
+        AppendSpecification app2 = dz1.add(Collections.<Version>emptyList().iterator());
+        byte[] file2 = access1.applyAppendSpec(app2);
+        assertEquals("Still only header", 4, file2.length);
+        assertArrayEquals("Unchanged", file1, file2);
+
+        // Add something:
+        ByteArrayAccess access2 = new ByteArrayAccess(file2);
+        DeltaZip dz2 = new DeltaZip(access2);
+        byte[] rev_in = {0, 1, 2, 3, -2, -1};
+        AppendSpecification app3 = dz2.add(Collections.singletonList(new Version(rev_in)));
+        byte[] file3 = access2.applyAppendSpec(app3);
+
+        // Verify addition:
+        ByteArrayAccess access3 = new ByteArrayAccess(file3);
+        DeltaZip dz3 = new DeltaZip(access3);
+        ByteBuffer rev_out = dz3.get();
+        assertArrayEquals("in==out", rev_in, DZUtil.allToByteArray(rev_out));
+        assertFalse(dz3.hasPrevious());
+
+        // Add zero versions to a non-empty archive:
+        AppendSpecification app4 = dz3.add(Collections.<Version>emptyList().iterator());
+        byte[] file4 = access3.applyAppendSpec(app4);
+        assertArrayEquals("Unchanged", file3, file4);
+    }
+
+    @Test
 	public void totally_random_test() throws IOException {
 		final Random rnd = new Random();
 
