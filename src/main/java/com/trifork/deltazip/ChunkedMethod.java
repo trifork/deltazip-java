@@ -59,7 +59,7 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 
 				// Determine dictionary:
 				int rskip = spec_to_rskip(rskip_spec);
-				ref_data_offset += rskip;
+				ref_data_offset = Math.min(ref_data_offset+rskip, ref_data.length);
 				int dict_size = Math.min(WINDOW_SIZE, ref_data.length-ref_data_offset);
 				Dictionary dict = new Dictionary(ref_data, ref_data_offset, dict_size);
 
