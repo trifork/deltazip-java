@@ -4,12 +4,25 @@
 
     <groupId>com.trifork</groupId>
     <artifactId>deltazip-java</artifactId>
-    <version>0.1-b78c91ce</version>
+    <version>1.0</version>
     <packaging>jar</packaging>
 
     <name>DeltaZip</name>
     <url>https://github.com/trifork/deltazip-java</url>
     <description>Zip adaptation for archiving</description>
+
+    <distributionManagement>
+      <snapshotRepository>
+        <id>trifork.snapshots</id>
+        <name>Trifork internal snapshot Nexus</name>
+        <url>http://nexus.ci82.trifork.com/content/repositories/snapshots/</url>
+      </snapshotRepository>
+      <repository>
+        <id>trifork.releases</id>
+        <name>Trifork internal releases Nexus</name>
+        <url>http://nexus.ci82.trifork.com/content/repositories/releases</url>
+      </repository>
+    </distributionManagement>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
