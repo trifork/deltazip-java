@@ -94,19 +94,17 @@ public class DeltaZipTest {
                                    ByteBuffer exp_rev2, List<Metadata.Item> exp_md2)
             throws IOException {
 		DeltaZip dz = new DeltaZip(new ByteArrayAccess(file));
-		ByteBuffer actual_rev1 = dz.get();
-		assertEquals(exp_rev1, actual_rev1);
-        assertEquals(dz.getMetadata(), exp_md1);
+        DeltaZip.VersionIterator iter = dz.backwardsIterator();
 
-        dz.previous();
-		ByteBuffer actual_rev2  = dz.get();
-		assertEquals(exp_rev2, actual_rev2);
-        assertEquals(dz.getMetadata(), exp_md2);
+        Version actual1 = iter.next();
+        assertEquals(exp_rev1, actual1.getContents());
+        assertEquals(exp_md1, actual1.getMetadata());
 
-        try {
-			dz.previous();
-			throw new RuntimeException("Assertion failed");
-		} catch (Exception e) {}
+        Version actual2 = iter.next();
+		assertEquals(exp_rev2, actual2.getContents());
+        assertEquals(exp_md2, actual2.getMetadata());
+
+        assertFalse(iter.hasNext());
 	}
 
 
@@ -157,40 +155,44 @@ public class DeltaZipTest {
 		DeltaZip dz2 = new DeltaZip(access2);
 
 		//==== Tests:
-		// ...of get():
-		assertEquals(dz1.getVersion(), rev1);
+        { // ...of iterator (0 version - tests emptiness case):
+            DeltaZip.VersionIterator iter0 = dz0.backwardsIterator();
+            assertFalse(iter0.hasNext());
+        }
 
-		// ...of previous():
-		assertEquals(dz2.getVersion(), rev2);
-		dz2.previous();
-		assertEquals(dz2.getVersion(), rev1);
+        { // ...of iterator (1 version):
+            DeltaZip.VersionIterator iter1 = dz1.backwardsIterator();
+            assertTrue(iter1.hasNext());
+            assertEquals(rev1, iter1.next());
+            assertFalse(iter1.hasNext());
+        }
 
-		// ...of resetCursor():
-		dz2.resetCursor();
-		assertEquals(dz2.getVersion(), rev2);
-		dz2.resetCursor();
-		assertEquals(dz2.getVersion(), rev2);
+        { // ...of iteration (2 versions - tests iteration order):
+            DeltaZip.VersionIterator iter2 = dz2.backwardsIterator();
+            assertTrue(iter2.hasNext());
+            assertEquals(rev2, iter2.next()); // Get rev2 first!
+            assertTrue(iter2.hasNext());
+            assertEquals(rev1, iter2.next());
+            assertFalse(iter2.hasNext());
+        }
 
-		// ...of clone():
-		DeltaZip dz2c = dz2.clone();
-		assertEquals(dz2c.getVersion(), rev2);
-		dz2c.previous();
-		assertEquals(dz2c.getVersion(), rev1);
-		// Now, dz2 should still be at the end:
-		assertEquals(dz2.getVersion(), rev2);
-		// And vice versa:
-		dz2c.resetCursor();
-		dz2.previous();
-		assertEquals(dz2c.getVersion(), rev2);
+        { // Of independence of iterators:
+            DeltaZip.VersionIterator iter2a = dz2.backwardsIterator();
+            DeltaZip.VersionIterator iter2b = dz2.backwardsIterator();
+            assertTrue(iter2a.hasNext());
+            assertTrue(iter2b.hasNext());
 
-		try {
-			dz1.previous();
-			throw new RuntimeException("Assertion failed");
-		} catch (Exception e) {}
-		try {
-			dz2.previous();
-			throw new RuntimeException("Assertion failed");
-		} catch (Exception e) {}
+            // First read iter2a:
+            assertEquals(iter2a.next(), rev2);
+            assertEquals(iter2a.next(), rev1);
+
+            assertFalse(iter2a.hasNext());
+            assertTrue(iter2b.hasNext());
+
+            // Then read iter2b:
+            assertEquals(iter2b.next(), rev2);
+            assertEquals(iter2b.next(), rev1);
+        }
 	}
 
     @Test
@@ -198,7 +200,7 @@ public class DeltaZipTest {
         byte[] file0 = new byte[] {};
         ByteArrayAccess access0 = new ByteArrayAccess(file0);
         DeltaZip dz0 = new DeltaZip(access0);
-        assertNull(dz0.get());
+        assertFalse(dz0.backwardsIterator().hasNext());
 
         // Add zero versions to the empty archive (without header):
         AppendSpecification app1 = dz0.add(Collections.<Version>emptyList().iterator());
@@ -223,9 +225,10 @@ public class DeltaZipTest {
         // Verify addition:
         ByteArrayAccess access3 = new ByteArrayAccess(file3);
         DeltaZip dz3 = new DeltaZip(access3);
-        ByteBuffer rev_out = dz3.get();
+        DeltaZip.VersionIterator iter3 = dz3.backwardsIterator();
+        ByteBuffer rev_out = iter3.next().getContents();
         assertArrayEquals("in==out", rev_in, DZUtil.allToByteArray(rev_out));
-        assertFalse(dz3.hasPrevious());
+        assertFalse(iter3.hasNext());
 
         // Add zero versions to a non-empty archive:
         AppendSpecification app4 = dz3.add(Collections.<Version>emptyList().iterator());
@@ -331,23 +334,23 @@ public class DeltaZipTest {
 			file = access.applyAppendSpec(app_spec);
 		}
 
-		{// Verify contents:
-			ByteArrayAccess access = new ByteArrayAccess(file);
-			DeltaZip dz = new DeltaZip(access);
-			for (int i=versions.length-1; i>=0; i--) {
-				System.err.print(",");
-				assertEquals(dz.get(), versions[i]);
-				if (i>0) {
-					assert(dz.hasPrevious());
-					dz.previous();
-				}
-			}
-			assert(! dz.hasPrevious());
-		}
-		System.err.println(">");
+        assertArchiveContentsEquals(versions, file);
+        System.err.println(">");
 	}
 
-	//======================================================================
+    private void assertArchiveContentsEquals(ByteBuffer[] versions, byte[] file) throws IOException {
+        // Verify contents:
+        ByteArrayAccess access = new ByteArrayAccess(file);
+        DeltaZip dz = new DeltaZip(access);
+        int i=versions.length-1;
+        for (Version version : dz.backwardsIterable()) {
+            assertEquals(version.getContents(), versions[i]);
+            i--;
+        }
+        assertEquals("There are only the expected number of versions", i, -1);
+    }
+
+    //======================================================================
 
     @Test
     public void totally_random_test_with_metadata() throws IOException {
@@ -387,15 +390,12 @@ public class DeltaZipTest {
         {// Verify contents:
             ByteArrayAccess access = new ByteArrayAccess(file);
             DeltaZip dz = new DeltaZip(access);
-            for (int i=versions.length-1; i>=0; i--) {
-                System.err.print(",");
-                assertEquals(dz.getVersion(), versions[i]);
-                if (i>0) {
-                    assert(dz.hasPrevious());
-                    dz.previous();
-                }
+            int i=versions.length-1;
+            for (Version version : dz.backwardsIterable()) {
+                assertEquals(version, versions[i]);
+                i--;
             }
-            assert(! dz.hasPrevious());
+            assertEquals("There are only the expected number of versions", i, -1);
         }
         System.err.println(">");
 

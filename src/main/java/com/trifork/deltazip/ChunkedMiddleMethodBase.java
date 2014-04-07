@@ -9,24 +9,28 @@ import java.util.zip.Inflater;
 abstract class ChunkedMiddleMethodBase extends DeltaZip.CompressionMethod {
 	private ChunkedMethod chunked_method = new ChunkedMethod();
 
-	public byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) throws IOException {
+	public byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) throws ArchiveIntegrityException {
 		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		int prefix_len = DZUtil.varlen_decode(org);
-		int suffix_len = DZUtil.varlen_decode(org);
+        try { // For IOException; shouldn't happen
+            int prefix_len = DZUtil.varlen_decode(org);
+            int suffix_len = DZUtil.varlen_decode(org);
 
-		// Add prefix:
-		baos.write(ref_data, 0, prefix_len);
+            // Add prefix:
+            baos.write(ref_data, 0, prefix_len);
 
-		// Add middle:
-        byte[] ref_middle = calcRefMiddle(ref_data, prefix_len, suffix_len);
-		byte[] middle = chunked_method.uncompress(org, ref_middle, inflater);
-		baos.write(middle);
+            // Add middle:
+            byte[] ref_middle = calcRefMiddle(ref_data, prefix_len, suffix_len);
+            byte[] middle = chunked_method.uncompress(org, ref_middle, inflater);
+            baos.write(middle);
 
-		// Add suffix:
-		baos.write(ref_data, ref_data.length - suffix_len, suffix_len);
+            // Add suffix:
+            baos.write(ref_data, ref_data.length - suffix_len, suffix_len);
 
-		baos.close();
-		return baos.toByteArray();
+            baos.close();
+            return baos.toByteArray();
+        } catch (IOException ioe) {
+            throw new RuntimeException(ioe);
+        }
 	}
 
     protected abstract byte[] calcRefMiddle(byte[] ref_data, int prefix_len, int suffix_len);

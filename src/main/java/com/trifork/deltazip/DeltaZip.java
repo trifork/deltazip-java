@@ -54,80 +54,14 @@ public class DeltaZip {
 
 	//==================== Fields ==========================================
 
-	private final Inflater inflater = new Inflater(true);
 	private final Access access;
-
     private FormatVersion format_version;
-	private long       current_pos;
-	private int        current_size;
-	private int        current_method;
-	private byte[]     current_version;
-	private int        current_checksum;
-	private ByteBuffer exposed_current_version;
-    private List<Metadata.Item> current_metadata;
 
 	//==================== API ==========================================
 	
 	public DeltaZip(Access access) throws IOException {
 		this.access = access;
 		this.format_version = check_magic_header();
-		set_cursor_at_end();
-	}
-
-	/** For cloning. */
-	private DeltaZip(DeltaZip org) {
-        // Archive-global fields:
-		this.access = org.access;
-        this.format_version = org.format_version;
-
-        // Version-local fields:
-		this.current_pos = org.current_pos;
-		this.current_size = org.current_size;
-		this.current_method = org.current_method;
-		this.current_version = org.current_version;
-		this.current_checksum = org.current_checksum;
-		this.exposed_current_version = org.exposed_current_version;
-        this.current_metadata = org.current_metadata;
-	}
-
-    /** Get the revision pointed to by the cursor. */
-    public Version getVersion() {
-        ByteBuffer contents = get();
-        return contents==null ? null : new Version(contents, getMetadata());
-    }
-
-    /** Get the revision pointed to by the cursor. */
-	public ByteBuffer get() {
-		return (exposed_current_version==null) ? null
-			: exposed_current_version.duplicate();
-	}
-
-	/** Get the metadata associated with revision pointed to by the cursor. */
-	public List<Metadata.Item> getMetadata() {
-		return current_metadata==null ? null : Collections.unmodifiableList(current_metadata);
-	}
-
-	/** Tells whether there are older revisions. */
-	public boolean hasPrevious() {
-		return current_pos > FILE_HEADER_LENGTH;
-	}
-
-	/** Retreat the cursor.
-	 *  @throws InvalidStateException if the cursor is pointing at the first revision.
-	 */
-	public void previous() throws IOException {
-		if (!hasPrevious()) throw new IllegalStateException();
-		goto_previous_position_and_compute_current_version();
-	}
-
-	/** Set the cursor to point at the end of the archive.
-	 */
-	public void resetCursor() throws IOException {
-		if (!at_initial_position()) set_cursor_at_end();
-	}
-
-	public DeltaZip clone() {
-		return new DeltaZip(this);
 	}
 
 	/** Computes an AppendSpecification for adding a version.
@@ -162,17 +96,18 @@ public class DeltaZip {
      *  Has the side effect of placing the cursor at the end.
      */
 	public AppendSpecification add(Iterator<Version> versions_to_add) throws IOException {
-		set_cursor_at_end();
 		ExtByteArrayOutputStream baos = new ExtByteArrayOutputStream();
 
-		// If the file is empty, add a header:
-		if (current_pos==0) baos.writeBigEndianInteger(DELTAZIP_MAGIC_HEADER | VERSION_11, 4);
+        VersionIterator iter = backwardsIterator();
+        Version prev_version = iter.hasNext() ? iter.next() : null;
+        long current_pos = iter.getCurrentPosition();
+
+        // If the file is empty, add a header:
+        if (current_pos ==0) baos.writeBigEndianInteger(DELTAZIP_MAGIC_HEADER | VERSION_11, 4);
 
         if (!versions_to_add.hasNext()) { // Handle degenerate case.
             return new AppendSpecification(access.getSize(), baos.toByteArray());
         }
-
-        Version prev_version = getVersion();
 
 		while (versions_to_add.hasNext()) {
 			Version cur = versions_to_add.next();
@@ -187,13 +122,20 @@ public class DeltaZip {
 		return new AppendSpecification(current_pos, baos.toByteArray());
 	}
 
-	//==================== Stats API =======================================
-	public int getCurrentChecksum() {return current_checksum;}
-	public int getCurrentMethod()   {return current_method;}
-	public int getCurrentCompSize() {return current_size;}
-	public int getCurrentRawSize()  {return current_version==null? -1 : current_version.length;}
+    public Iterable<Version> backwardsIterable() {
+        return new Iterable() {
+            @Override
+            public Iterator iterator() {
+                return backwardsIterator();
+            }
+        };
+    }
 
-	//==================== Internals =======================================
+    public VersionIterator backwardsIterator() {
+        return new BackwardsIterator();
+    }
+
+    //==================== Internals =======================================
 
     /** @returns the archive format version number. */
 	protected FormatVersion check_magic_header() throws IOException {
@@ -215,61 +157,6 @@ public class DeltaZip {
 		return magic;
 	}
 
-	protected void set_cursor_at_end() throws IOException {
-		set_initial_position();
-		if (hasPrevious()) previous();
-	}
-
-	protected void set_initial_position() throws IOException {
-		current_pos = access.getSize();
-	}
-
-	protected boolean at_initial_position() throws IOException {
-		return current_pos == access.getSize();
-	}
-
-	private static final int ENVELOPE_HEADER  = 4 + 4; // Start-tag + checksum
-	private static final int ENVELOPE_TRAILER = 4; // End.tag
-	private static final int ENVELOPE_OVERHEAD = ENVELOPE_HEADER + ENVELOPE_TRAILER;
-	protected void goto_previous_position_and_compute_current_version() throws IOException {
-		ByteBuffer tag_buf = access.pread(current_pos-ENVELOPE_TRAILER, ENVELOPE_TRAILER);
-		int tag = tag_buf.getInt(0);
-		int size = tag &~ (-1 << format_version.versionSizeBits());
-		int method = (tag >> METHOD_BIT_POSITION) & 15;
-        boolean has_metadata = format_version.supportsMetadata() &&
-                (tag & (1 << METADATA_FLAG_BIT_POSITION)) != 0;
-// 		System.err.println("DB| tag="+tag+" -> "+method+":"+size);
-
-		// Read envelope header:
-		long start_pos = current_pos - size - ENVELOPE_OVERHEAD;
-		ByteBuffer data_buf = access.pread(start_pos, size + ENVELOPE_HEADER);
-		data_buf.rewind();
-		int start_tag = data_buf.getInt();
-		if (start_tag != tag) throw new IOException("Data error - tag mismatch @ "+start_pos+";"+current_pos);
-		int adler32 = data_buf.getInt();
-        List<Metadata.Item> metadata =
-                has_metadata ? Metadata.unpack(data_buf) : Collections.EMPTY_LIST;
-
-        // Unpack:
-		byte[] version = compute_current_version(method, data_buf, start_pos);
-
-		// Verify checksum:
-		int actual_adler32 = DZUtil.computeAdler32(version);
-		if (actual_adler32 != adler32) {
-			dump("checksumming failed: "+actual_adler32+" rather than "+adler32, version);
-			throw new IOException("Data error - checksum mismatch @ "+start_pos+": stored is "+adler32+" but computed is "+actual_adler32);
-		}
-
-		// Commit:
-		this.current_pos     = start_pos;
-		this.current_method  = method;
-		this.current_size    = size;
-		this.current_version = version;
-		this.exposed_current_version = ByteBuffer.wrap(current_version).asReadOnlyBuffer();
-		this.current_checksum = actual_adler32;
-        this.current_metadata = metadata;
-	}
-
 	public static void dump(String s, byte[] buf) {
 		System.err.print(s);
 		System.err.print("<<");
@@ -278,13 +165,6 @@ public class DeltaZip {
 			System.err.print(buf[i] & 0xff);
 		}
 		System.err.println(">>");
-	}
-
-	protected byte[] compute_current_version(int method, ByteBuffer data_buf, long pos) throws IOException {
-		CompressionMethod cm = COMPRESSION_METHODS[method];
-		if (cm==null) throw new IOException("Invalid compression method: "+method+" @ "+pos);
-
-		return cm.uncompress(data_buf, current_version, inflater);
 	}
 
 	//====================
@@ -361,11 +241,130 @@ public class DeltaZip {
 
 	}
 
-   //==================== Compression methods =============================
+    //==================== Iteration implementation ==============================
+
+    private class BackwardsIterator implements VersionIterator {
+        private final Inflater inflater = new Inflater(true);
+        private long       current_pos;
+        private int        current_size;
+        private int        current_method;
+        private byte[]     current_version;
+        private int        current_checksum;
+        private ByteBuffer exposed_current_version;
+        private List<Metadata.Item> current_metadata;
+
+        public BackwardsIterator() {
+            try {
+                this.current_pos = access.getSize();
+            } catch (IOException ioe) {
+                throw new RuntimeException(ioe);
+            }
+        }
+
+        @Override
+        public void remove() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public boolean hasNext() {
+            /** Tells whether there are older revisions. */
+            return current_pos > FILE_HEADER_LENGTH;
+        }
+
+        //==================== Stats API =======================================
+        public long getCurrentPosition() {return current_pos;}
+        public int getCurrentChecksum() {return current_checksum;}
+        public int getCurrentMethod()   {return current_method;}
+        public int getCurrentCompSize() {return current_size;}
+        public int getCurrentRawSize()  {return current_version==null? -1 : current_version.length;}
+
+        @Override
+        /** Retreat the cursor.
+         *  @throws InvalidStateException if the cursor is pointing at the first revision.
+         */
+        public Version next() {
+            if (!hasNext()) throw new IllegalStateException();
+            try {
+                goto_previous_position_and_compute_current_version();
+            } catch (IOException ioe) {
+                throw new RuntimeException(ioe);
+            }
+            return currentVersion();
+        }
+
+        /** Get the revision pointed to by the cursor. */
+        private Version currentVersion() {
+            return new Version(getData(), getMetadata());
+        }
+
+        /** Get the revision pointed to by the cursor. */
+        private ByteBuffer getData() {
+            return (exposed_current_version==null) ? null
+                    : exposed_current_version.duplicate();
+        }
+
+        /** Get the metadata associated with revision pointed to by the cursor. */
+        private List<Metadata.Item> getMetadata() {
+            return current_metadata==null ? null : Collections.unmodifiableList(current_metadata);
+        }
+
+        private static final int ENVELOPE_HEADER  = 4 + 4; // Start-tag + checksum
+        private static final int ENVELOPE_TRAILER = 4; // End.tag
+        private static final int ENVELOPE_OVERHEAD = ENVELOPE_HEADER + ENVELOPE_TRAILER;
+        private void goto_previous_position_and_compute_current_version() throws ArchiveIntegrityException, IOException {
+            ByteBuffer tag_buf = access.pread(current_pos-ENVELOPE_TRAILER, ENVELOPE_TRAILER);
+            int tag = tag_buf.getInt(0);
+            int size = tag &~ (-1 << format_version.versionSizeBits());
+            int method = (tag >> METHOD_BIT_POSITION) & 15;
+            boolean has_metadata = format_version.supportsMetadata() &&
+                    (tag & (1 << METADATA_FLAG_BIT_POSITION)) != 0;
+// 		System.err.println("DB| tag="+tag+" -> "+method+":"+size);
+
+            // Read envelope header:
+            long start_pos = current_pos - size - ENVELOPE_OVERHEAD;
+            ByteBuffer data_buf = access.pread(start_pos, size + ENVELOPE_HEADER);
+            data_buf.rewind();
+            int start_tag = data_buf.getInt();
+            if (start_tag != tag) throw new IOException("Data error - tag mismatch @ "+start_pos+";"+current_pos);
+            int adler32 = data_buf.getInt();
+            List<Metadata.Item> metadata =
+                    has_metadata ? Metadata.unpack(data_buf) : Collections.EMPTY_LIST;
+
+            // Unpack:
+            byte[] version = compute_current_version(method, data_buf, start_pos);
+
+            // Verify checksum:
+            int actual_adler32 = DZUtil.computeAdler32(version);
+            if (actual_adler32 != adler32) {
+                dump("checksumming failed: "+actual_adler32+" rather than "+adler32, version);
+                throw new IOException("Data error - checksum mismatch @ "+start_pos+": stored is "+adler32+" but computed is "+actual_adler32);
+            }
+
+            // Commit:
+            this.current_pos     = start_pos;
+            this.current_method  = method;
+            this.current_size    = size;
+            this.current_version = version;
+            this.exposed_current_version = ByteBuffer.wrap(current_version).asReadOnlyBuffer();
+            this.current_checksum = actual_adler32;
+            this.current_metadata = metadata;
+        }
+
+        protected byte[] compute_current_version(int method, ByteBuffer data_buf, long pos) throws IOException {
+            CompressionMethod cm = COMPRESSION_METHODS[method];
+            if (cm==null) throw new IOException("Invalid compression method: "+method+" @ "+pos);
+
+            return cm.uncompress(data_buf, current_version, inflater);
+        }
+
+    }
+
+    //==================== Compression methods =============================
 	protected static abstract class CompressionMethod {
 		public abstract int methodNumber();
 		public abstract void compress(ByteBuffer org, byte[] ref_data, OutputStream dst) throws IOException;
-		public abstract byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) throws IOException;
+		public abstract byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) throws ArchiveIntegrityException;
 	}
 
 	//==================== Interface types ==============================
@@ -388,5 +387,13 @@ public class DeltaZip {
 			this(prefix_size, ByteBuffer.wrap(new_tail).asReadOnlyBuffer());
 		}
 	}
+
+    public interface VersionIterator extends Iterator<Version> {
+        public long getCurrentPosition();
+        public int getCurrentChecksum();
+        public int getCurrentMethod();
+        public int getCurrentCompSize();
+        public int getCurrentRawSize();
+    }
 
 }

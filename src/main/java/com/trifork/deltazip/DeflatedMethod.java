@@ -12,7 +12,7 @@ class DeflatedMethod extends DeltaZip.CompressionMethod {
 	//==================== API fulfillment ==============================
 	public int methodNumber() {return DeltaZip.METHOD_DEFLATED;}
 
-	public byte[] uncompress(ByteBuffer org, byte[] _ref_data, Inflater inflater) throws IOException {
+	public byte[] uncompress(ByteBuffer org, byte[] _ref_data, Inflater inflater) throws ArchiveIntegrityException {
 		return DZUtil.inflate(inflater, org, org.remaining(), null);
 	}
 

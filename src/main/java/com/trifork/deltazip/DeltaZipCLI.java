@@ -46,14 +46,11 @@ public abstract class DeltaZipCLI {
 		FileAccess fa = openDZFile(args[1]);
 		DeltaZip dz = new DeltaZip(fa);
 
-		int count = 0;
-		if (dz.get() != null) {
+        int count = 0;
+        for (Version v : dz.backwardsIterable()) {
 			count++;
-			while (dz.hasPrevious()) {
-				dz.previous();
-				count++;
-			}
-		}
+        }
+
 		fa.close();
 		System.out.println(count);
 	}
@@ -66,25 +63,21 @@ public abstract class DeltaZipCLI {
 
 		System.out.println("Nr:\tMethod\tCompSize\tVersionSize\tChecksum\tMetadata");
 
-		if (dz.get() == null) return;
-
 		int nr = 0;
-		for (;; nr++) {
-			String line =
+        DeltaZip.VersionIterator iter = dz.backwardsIterator();
+        while (iter.hasNext()) {
+            Version version = iter.next();
+            String line =
 				String.format("%d:\t"+"M%d\t"+"%8d\t"+"%8d\t"+"%8x\t%s",
 							  (-nr),
-							  dz.getCurrentMethod(),
-							  dz.getCurrentCompSize(),
-							  dz.getCurrentRawSize(),
-							  dz.getCurrentChecksum(),
-                              metadataToString(dz.getMetadata()));
+							  iter.getCurrentMethod(),
+							  iter.getCurrentCompSize(),
+							  iter.getCurrentRawSize(),
+							  iter.getCurrentChecksum(),
+                              metadataToString(version.getMetadata()));
 			System.out.println(line);
-			
-			if (dz.hasPrevious()) {
-				dz.previous();
-			} else {
-				break;
-			}
+
+            nr++;
 		}
 		fa.close();
 	}
@@ -122,22 +115,25 @@ public abstract class DeltaZipCLI {
 			file_arg++;
 		}
 		if (args.length != file_arg+1) {usage(); System.exit(1);}
+        if (rev_nr < 0) {usage(); System.exit(1);}
 
-		FileAccess fa = openDZFile(args[file_arg]);
+        FileAccess fa = openDZFile(args[file_arg]);
 		DeltaZip dz = new DeltaZip(fa);
 
-		if (dz.get() == null) {
-			System.err.println("Archive is empty.");
-			System.exit(3);
-		} else {
-			for (int i=0; i<rev_nr; i++) {
-				if (! dz.hasPrevious()) {
-					System.err.println("Archive only contains "+(i+1)+" versions.");
-					System.exit(3);
-				}
-				dz.previous();
+        DeltaZip.VersionIterator iter = dz.backwardsIterator();
+        if (! iter.hasNext()) {
+            System.err.println("Archive is empty.");
+            System.exit(3);
+        } else {
+            Version v = null;
+            for (int i=0; i<rev_nr; i++) {
+                if (! iter.hasNext()) {
+                    System.err.println("Archive only contains "+(i+1)+" versions.");
+                    System.exit(3);
+                }
+				v = iter.next();
 			}
-			System.out.write(DZUtil.allToByteArray(dz.get()));
+			System.out.write(DZUtil.allToByteArray(v.getContents()));
 		}
 		fa.close();
 	}

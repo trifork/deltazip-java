@@ -41,7 +41,7 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 	public int methodNumber() {return DeltaZip.METHOD_CHUNKED;}
 
 	//==================== Uncompression: ========================================
-	public byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) throws IOException {
+	public byte[] uncompress(ByteBuffer org, byte[] ref_data, Inflater inflater) throws ArchiveIntegrityException {
 		ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
 		int ref_data_offset = 0;
@@ -70,18 +70,18 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 // 				System.err.println("DB| inflated "+comp_data_size+" to "+(after-before));
 			} break;
 			case CHUNK_METHOD_PREFIX_COPY: {
-				if ((meth & 7) != 0) throw new IOException("Invalid chunk encoding: "+meth);
+				if ((meth & 7) != 0) throw new ArchiveIntegrityException("Invalid chunk encoding: "+meth);
 				int comp_data_size = org.getChar(); // unsigned short
-				if (comp_data_size != 2) throw new IOException("Invalid chunk length: "+comp_data_size);
+				if (comp_data_size != 2) throw new ArchiveIntegrityException("Invalid chunk length: "+comp_data_size);
 
 				int copy_length = 1 + org.getChar(); // unsigned short
 				baos.write(ref_data, ref_data_offset, copy_length);
 				ref_data_offset += copy_length;
 			} break;
 			case CHUNK_METHOD_OFFSET_COPY: {
-				if ((meth & 7) != 0) throw new IOException("Invalid chunk encoding: "+meth);
+				if ((meth & 7) != 0) throw new ArchiveIntegrityException("Invalid chunk encoding: "+meth);
 				int comp_data_size = org.getChar(); // unsigned short
-				if (comp_data_size != 4) throw new IOException("Invalid chunk length: "+comp_data_size);
+				if (comp_data_size != 4) throw new ArchiveIntegrityException("Invalid chunk length: "+comp_data_size);
 
 				int offset      = 1 + org.getChar(); // unsigned short
 				int copy_length = 1 + org.getChar(); // unsigned short
@@ -90,7 +90,7 @@ class ChunkedMethod extends DeltaZip.CompressionMethod {
 				ref_data_offset += copy_length;
 			} break;
 			default:
-				throw new IOException("Invalid chunk encoding: "+meth);
+				throw new ArchiveIntegrityException("Invalid chunk encoding: "+meth);
 			}//switch
 		}
 		return baos.toByteArray();

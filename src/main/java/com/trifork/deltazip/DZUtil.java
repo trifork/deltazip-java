@@ -169,7 +169,7 @@ public abstract class DZUtil {
         }
     }
 
-    public static int varlen_decode(ByteBuffer in) throws IOException {
+    public static int varlen_decode(ByteBuffer in) throws ArchiveIntegrityException {
         long acc = 0;
         int bits = 0;
         boolean more;
@@ -179,7 +179,7 @@ public abstract class DZUtil {
             b &= 0x7F;
             acc = (acc << 7) | (b & 0x7F);
             bits += 7;
-            if (acc > Integer.MAX_VALUE) throw new IOException("Variable-length encoded integer is too large: "+acc);
+            if (acc > Integer.MAX_VALUE) throw new ArchiveIntegrityException("Variable-length encoded integer is too large: "+acc);
         } while (more);
         return (int) acc;
     }
@@ -234,19 +234,27 @@ public abstract class DZUtil {
 		}
 	}
 
-	public static byte[] inflate(Inflater inflater, ByteBuffer src, int uncomp_length, Dictionary dict) throws IOException {
-		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		inflate(inflater, src, uncomp_length, baos, dict);
-		baos.close();
-		return baos.toByteArray();
+	public static byte[] inflate(Inflater inflater, ByteBuffer src, int uncomp_length, Dictionary dict) throws ArchiveIntegrityException {
+        try { // Can't really throw IOException
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            inflate(inflater, src, uncomp_length, baos, dict);
+            baos.close();
+            return baos.toByteArray();
+        } catch (IOException ioe) {
+            throw new ArchiveIntegrityException(ioe);
+        }
 	}
 
-	public static void inflate(Inflater _inflater, ByteBuffer src, int comp_length, OutputStream dst, Dictionary dict) throws IOException {
+	public static void inflate(Inflater _inflater, ByteBuffer src, int comp_length, ByteArrayOutputStream dst, Dictionary dict) throws ArchiveIntegrityException {
 		// Apparently this goes against the grain... so we need to copy.
 		ByteArrayInputStream src_str = new ByteArrayInputStream(remainingToByteArray(takeStart(src, comp_length)));
 		MyZInputStream zis = new MyZInputStream(src_str, true);
 		if (dict != null) zis.setInflateDict(dict);
-		transfer(zis, dst);
+        try {
+            transfer(zis, dst);
+        } catch (IOException ioe) {
+            throw new ArchiveIntegrityException(ioe);
+        }
 	}
 
 	public static byte[] deflate(Deflater deflater, ByteBuffer src, int uncomp_length, Dictionary dict) {
