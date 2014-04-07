@@ -163,7 +163,7 @@ public class DeltaZip {
 		return magic;
 	}
 
-	public static void dump(String s, byte[] buf) {
+	private static void dump(String s, byte[] buf) {
 		System.err.print(s);
 		System.err.print("<<");
 		for (int i=0; i<buf.length; i++) {
