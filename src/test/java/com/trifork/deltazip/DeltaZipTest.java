@@ -193,6 +193,11 @@ public class DeltaZipTest {
             assertEquals(iter2b.next(), rev2);
             assertEquals(iter2b.next(), rev1);
         }
+        { // Test latestVersion():
+            assertEquals(null, dz0.latestVersion());
+            assertEquals(rev1, dz1.latestVersion());
+            assertEquals(rev2, dz2.latestVersion());
+        }
 	}
 
     @Test

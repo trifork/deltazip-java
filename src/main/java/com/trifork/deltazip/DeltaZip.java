@@ -122,6 +122,12 @@ public class DeltaZip {
 		return new AppendSpecification(current_pos, baos.toByteArray());
 	}
 
+    /** Return the most recent version, or null if the archive is empty. */
+    public Version latestVersion() {
+        VersionIterator iter = backwardsIterator();
+        return iter.hasNext() ? iter.next() : null;
+    }
+
     public Iterable<Version> backwardsIterable() {
         return new Iterable() {
             @Override
