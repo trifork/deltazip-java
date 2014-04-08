@@ -15,6 +15,8 @@ public class DeltaZip {
 
 	//==================== Constants =======================================
 
+    public static final boolean USE_JZLIB_ALWAYS = System.getProperty("deltazip-use-jzlib-always") != null;
+
 	public static final int DELTAZIP_MAGIC_HEADER = 0xCEB47A00;
 	public static final int MACIC_MASK = 0xFFFFFF00;
 	public static final int VERSION_MASK = 0xFF;

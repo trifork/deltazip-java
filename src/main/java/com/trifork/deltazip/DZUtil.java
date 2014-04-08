@@ -16,7 +16,7 @@ import java.nio.channels.FileChannel;
 import java.util.Arrays;
 
 import java.util.zip.Deflater;
-// import java.util.zip.DeflaterOutputStream;
+import java.util.zip.DeflaterOutputStream;
 import java.util.zip.Inflater;
 import java.util.zip.InflaterOutputStream;
 import com.jcraft.jzlib.JZlib;
@@ -245,13 +245,26 @@ public abstract class DZUtil {
         }
 	}
 
-	public static void inflate(Inflater _inflater, ByteBuffer src, int comp_length, ByteArrayOutputStream dst, Dictionary dict) throws ArchiveIntegrityException {
-		// Apparently this goes against the grain... so we need to copy.
-		ByteArrayInputStream src_str = new ByteArrayInputStream(remainingToByteArray(takeStart(src, comp_length)));
-		MyZInputStream zis = new MyZInputStream(src_str, true);
-		if (dict != null) zis.setInflateDict(dict);
+	public static void inflate(Inflater inflater, ByteBuffer src, int comp_length, ByteArrayOutputStream dst, Dictionary dict) throws ArchiveIntegrityException {
         try {
-            transfer(zis, dst);
+            if (dict == null && ! DeltaZip.USE_JZLIB_ALWAYS) {
+                // In this case, we can use the fast native inflater (not jzlib)
+                inflater.reset();
+                InflaterOutputStream zos = new InflaterOutputStream(dst, inflater);
+
+                if (dict != null) inflater.setDictionary(dict.data, dict.off, dict.len);
+
+                writeBufferTo(takeStart(src, comp_length), zos);
+                zos.finish();
+            } else {
+                // Use jzlib for inflation.
+
+                // Apparently this goes against the grain... so we need to copy.
+                ByteArrayInputStream src_str = new ByteArrayInputStream(remainingToByteArray(takeStart(src, comp_length)));
+                MyZInputStream zis = new MyZInputStream(src_str, true);
+                if (dict != null) zis.setInflateDict(dict);
+                transfer(zis, dst);
+            }
         } catch (IOException ioe) {
             throw new ArchiveIntegrityException(ioe);
         }
@@ -266,12 +279,20 @@ public abstract class DZUtil {
 		return baos.toByteArray();
 	}
 
-	public static void deflate(Deflater _deflater, ByteBuffer src, int uncomp_length, OutputStream dst, Dictionary dict) throws IOException {
-		MyZOutputStream zos = new MyZOutputStream(dst, JZlib.Z_BEST_COMPRESSION, true);
-		if (dict != null) zos.setDeflateDict(dict);
-		writeBufferTo(takeStart(src, uncomp_length), zos);
-		zos.finish();
-	}
+	public static void deflate(Deflater deflater, ByteBuffer src, int uncomp_length, OutputStream dst, Dictionary dict) throws IOException {
+        if (dict == null && ! DeltaZip.USE_JZLIB_ALWAYS) {
+            // In this case, we can use the fast native inflater (not jzlib)
+            deflater.reset();
+            DeflaterOutputStream zos = new DeflaterOutputStream(dst, deflater);
+            writeBufferTo(takeStart(src, uncomp_length), zos);
+            zos.finish();
+        } else {
+            MyZOutputStream zos = new MyZOutputStream(dst, JZlib.Z_BEST_COMPRESSION, true);
+            if (dict != null) zos.setDeflateDict(dict);
+            writeBufferTo(takeStart(src, uncomp_length), zos);
+            zos.finish();
+        }
+    }
 
 	/** Create a ByteBuffer which contains the 'length' first bytes of 'org'. Advance 'org' with 'length' bytes. */
 	public static ByteBuffer takeStart(ByteBuffer org, int length) {
