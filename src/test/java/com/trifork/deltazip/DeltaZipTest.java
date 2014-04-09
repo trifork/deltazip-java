@@ -86,7 +86,6 @@ public class DeltaZipTest {
                 new Metadata.Ancestor("www".getBytes(LATIN1)));
 
         test_two_revs_with(two_revs, exp_rev2, exp_md2, exp_rev1, exp_md1);
-
     }
 
     public void test_two_revs_with(byte[] file,
@@ -94,18 +93,37 @@ public class DeltaZipTest {
                                    ByteBuffer exp_rev2, List<Metadata.Item> exp_md2)
             throws IOException {
 		DeltaZip dz = new DeltaZip(new ByteArrayAccess(file));
-        DeltaZip.VersionIterator iter = dz.backwardsIterator();
 
-        Version actual1 = iter.next();
-        assertEquals(exp_rev1, actual1.getContents());
-        assertEquals(exp_md1, actual1.getMetadata());
+        { // Test with full backwards iterator:
+            DeltaZip.VersionIterator iter = dz.backwardsIterator();
 
-        Version actual2 = iter.next();
-		assertEquals(exp_rev2, actual2.getContents());
-        assertEquals(exp_md2, actual2.getMetadata());
+            assertTrue(iter.hasNext());
+            Version actual1 = iter.next();
+            assertEquals(exp_rev1, actual1.getContents());
+            assertEquals(exp_md1, actual1.getMetadata());
 
-        assertFalse(iter.hasNext());
-	}
+            assertTrue(iter.hasNext());
+            Version actual2 = iter.next();
+            assertEquals(exp_rev2, actual2.getContents());
+            assertEquals(exp_md2, actual2.getMetadata());
+
+            assertFalse(iter.hasNext());
+        }
+
+        { // Test backwards metadata-only iterator:
+            DeltaZip.MetadataIterator iter = dz.backwardsMetadataIterator();
+
+            assertTrue(iter.hasNext());
+            List<Metadata.Item> actual_md1 = iter.next();
+            assertEquals(exp_md1, actual_md1);
+
+            assertTrue(iter.hasNext());
+            List<Metadata.Item> actual_md2 = iter.next();
+            assertEquals(exp_md2, actual_md2);
+
+            assertFalse(iter.hasNext());
+        }
+    }
 
 
 
@@ -158,6 +176,9 @@ public class DeltaZipTest {
         { // ...of iterator (0 version - tests emptiness case):
             DeltaZip.VersionIterator iter0 = dz0.backwardsIterator();
             assertFalse(iter0.hasNext());
+
+            DeltaZip.MetadataIterator mditer0 = dz0.backwardsMetadataIterator();
+            assertFalse(mditer0.hasNext());
         }
 
         { // ...of iterator (1 version):
@@ -392,12 +413,21 @@ public class DeltaZipTest {
             file = access.applyAppendSpec(app_spec);
         }
 
+        ByteArrayAccess access = new ByteArrayAccess(file);
+        DeltaZip dz = new DeltaZip(access);
         {// Verify contents:
-            ByteArrayAccess access = new ByteArrayAccess(file);
-            DeltaZip dz = new DeltaZip(access);
             int i=versions.length-1;
             for (Version version : dz.backwardsIterable()) {
                 assertEquals(version, versions[i]);
+                i--;
+            }
+            assertEquals("There are only the expected number of versions", i, -1);
+        }
+
+        { // Verify metadata backwards:
+            int i=versions.length-1;
+            for (List<Metadata.Item> metadat : dz.backwardsMetadataIterable()) {
+                assertEquals(metadat, versions[i].getMetadata());
                 i--;
             }
             assertEquals("There are only the expected number of versions", i, -1);

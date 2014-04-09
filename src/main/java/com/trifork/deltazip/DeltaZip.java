@@ -145,6 +145,19 @@ public class DeltaZip {
         return new BackwardsIterator();
     }
 
+    public Iterable<List<Metadata.Item>> backwardsMetadataIterable() {
+        return new Iterable() {
+            @Override
+            public MetadataIterator iterator() {
+                return backwardsMetadataIterator();
+            }
+        };
+    }
+
+    public MetadataIterator backwardsMetadataIterator() {
+        return new BackwardsMetadataIterator();
+    }
+
     //==================== Internals =======================================
 
     /** @returns the archive format version number. */
