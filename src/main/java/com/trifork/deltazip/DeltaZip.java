@@ -132,6 +132,8 @@ public class DeltaZip {
         return iter.hasNext() ? iter.next() : null;
     }
 
+    //========== Iteration: ==========
+
     public Iterable<Version> backwardIterable() {
         return new Iterable() {
             @Override
@@ -156,6 +158,19 @@ public class DeltaZip {
 
     public MetadataIterator backwardMetadataIterator() {
         return new BackwardMetadataIterator();
+    }
+
+    public Iterable<List<Metadata.Item>> forwardMetadataIterable() {
+        return new Iterable() {
+            @Override
+            public MetadataIterator iterator() {
+                return forwardMetadataIterator();
+            }
+        };
+    }
+
+    public MetadataIterator forwardMetadataIterator() {
+        return new ForwardMetadataIterator();
     }
 
     //==================== Internals =======================================
@@ -281,8 +296,8 @@ public class DeltaZip {
         protected boolean thereIsAPreviousVersion() {
             return current_pos > FILE_HEADER_LENGTH;
         }
-        private boolean thereIsANextVersion() {
-            return current_pos + current_size < archive_size;
+        protected boolean thereIsANextVersion() {
+            return current_pos + current_size + ENVELOPE_OVERHEAD < archive_size;
         }
 
         //========== Cursor manipulation:
@@ -314,7 +329,7 @@ public class DeltaZip {
             int adler32 = header_buf.getInt();
 
             // Read envelope trailer:
-            ByteBuffer trailer_buf = access.pread(start_pos + ENVELOPE_OVERHEAD + size, ENVELOPE_TRAILER);
+            ByteBuffer trailer_buf = access.pread(start_pos + ENVELOPE_HEADER + size, ENVELOPE_TRAILER);
             int tag2 = trailer_buf.getInt(0);
 
             set_cursor_common(tag, tag2, start_pos, size, adler32);
@@ -336,6 +351,11 @@ public class DeltaZip {
 
         private int extractSizeFromTag(int tag) {
             return tag &~ (-1 << format_version.versionSizeBits());
+        }
+
+        protected List<Metadata.Item> extract_just_metadata() throws IOException {
+            ByteBuffer data_buf = access.pread(current_pos + ENVELOPE_HEADER, current_size); // Room for improvement here.
+            return current_has_metadata ? Metadata.unpack(data_buf) : Collections.EMPTY_LIST;
         }
     }
 
@@ -366,17 +386,49 @@ public class DeltaZip {
             if (!hasNext()) throw new IllegalStateException();
             try {
                 goto_previous_position_and_read_header();
-                extract_metadata();
+                this.current_metadata = extract_just_metadata();
             } catch (IOException ioe) {
                 throw new RuntimeException(ioe);
             }
 
             return current_metadata==null ? null : Collections.unmodifiableList(current_metadata);
         }
+    }
 
-        private void extract_metadata() throws IOException {
-            ByteBuffer data_buf = access.pread(current_pos + ENVELOPE_HEADER, current_size); // Room for improvement here.
-            this.current_metadata = current_has_metadata ? Metadata.unpack(data_buf) : Collections.EMPTY_LIST;
+    private class ForwardMetadataIterator extends IteratorBase implements MetadataIterator {
+        private List<Metadata.Item> current_metadata;
+
+        public ForwardMetadataIterator() {
+            this.current_pos = 0;
+            this.current_size = 4;
+        }
+
+        @Override
+        public long getCurrentPosition() {return this.current_pos;}
+
+        @Override
+        public void remove() { throw new UnsupportedOperationException(); }
+
+        @Override
+        /** Tells whether there are older revisions. */
+        public boolean hasNext() {
+            return thereIsANextVersion();
+        }
+
+        @Override
+        /** Retreat the cursor.
+         *  @throws InvalidStateException if the cursor is pointing at the first revision.
+         */
+        public List<Metadata.Item> next() {
+            if (!hasNext()) throw new IllegalStateException();
+            try {
+                goto_next_position_and_read_header();
+                this.current_metadata = extract_just_metadata();
+            } catch (IOException ioe) {
+                throw new RuntimeException(ioe);
+            }
+
+            return current_metadata==null ? null : Collections.unmodifiableList(current_metadata);
         }
     }
 

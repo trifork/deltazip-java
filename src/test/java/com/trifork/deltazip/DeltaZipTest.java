@@ -123,6 +123,20 @@ public class DeltaZipTest {
 
             assertFalse(iter.hasNext());
         }
+
+        { // Test forward metadata-only iterator:
+            DeltaZip.MetadataIterator iter = dz.forwardMetadataIterator();
+
+            assertTrue(iter.hasNext());
+            List<Metadata.Item> actual_md2 = iter.next();
+            assertEquals(exp_md2, actual_md2);
+
+            assertTrue(iter.hasNext());
+            List<Metadata.Item> actual_md1 = iter.next();
+            assertEquals(exp_md1, actual_md1);
+
+            assertFalse(iter.hasNext());
+        }
     }
 
 
@@ -179,6 +193,11 @@ public class DeltaZipTest {
 
             DeltaZip.MetadataIterator mditer0 = dz0.backwardMetadataIterator();
             assertFalse(mditer0.hasNext());
+            DeltaZip.MetadataIterator mditer0b = dz0.backwardMetadataIterator();
+            assertFalse(mditer0b.hasNext());
+
+            DeltaZip.MetadataIterator mditer0f = dz0.forwardMetadataIterator();
+            assertFalse(mditer0f.hasNext());
         }
 
         { // ...of iterator (1 version):
@@ -426,11 +445,19 @@ public class DeltaZipTest {
 
         { // Verify metadata backwards:
             int i=versions.length-1;
-            for (List<Metadata.Item> metadat : dz.backwardMetadataIterable()) {
-                assertEquals(metadat, versions[i].getMetadata());
+            for (List<Metadata.Item> metadata : dz.backwardMetadataIterable()) {
+                assertEquals(metadata, versions[i].getMetadata());
                 i--;
             }
             assertEquals("There are only the expected number of versions", i, -1);
+        }
+        { // Verify metadata forwards:
+            int i=0;
+            for (List<Metadata.Item> metadata : dz.forwardMetadataIterable()) {
+                assertEquals(metadata, versions[i].getMetadata());
+                i++;
+            }
+            assertEquals("There are only the expected number of versions", i, versions.length);
         }
         System.err.println(">");
 
