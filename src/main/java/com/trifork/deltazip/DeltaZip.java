@@ -83,24 +83,34 @@ public class DeltaZip {
         return add(Collections.singletonList(new_version).iterator());
 	}
 
-    /** Computes an AppendSpecification for adding a version.
-     */
+    /** Computes an AppendSpecification for adding a version. */
     public AppendSpecification add(Iterable<Version> versions_to_add) throws IOException {
         return add(versions_to_add.iterator());
     }
 
     /** Computes an AppendSpecification for adding a version. */
-	public AppendSpecification add(Iterator<Version> versions_to_add) throws IOException {
+    public AppendSpecification add(Position branch_pos, Iterable<Version> versions_to_add) throws IOException {
+        return add(branch_pos, versions_to_add.iterator());
+    }
+
+    /** Computes an AppendSpecification for adding a version. */
+    public AppendSpecification add(Iterator<Version> versions_to_add) throws IOException {
+        return add(null, versions_to_add);
+    }
+
+    /** Computes an AppendSpecification for adding a version. */
+	public AppendSpecification add(Position branch_pos, Iterator<Version> versions_to_add) throws IOException {
 		ExtByteArrayOutputStream baos = new ExtByteArrayOutputStream();
 
-        VersionIterator iter = backwardIterator();
+        VersionIterator iter = new BackwardIterator(branch_pos);
         Version prev_version = iter.hasNext() ? iter.next() : null;
-        long current_pos = iter.getArchivePosition();
+        long current_pos = iter.getVersionStartPosition().getArchivePosition();
 
         // If the file is empty, add a header:
         if (current_pos ==0) baos.writeBigEndianInteger(DELTAZIP_MAGIC_HEADER | VERSION_11, 4);
 
-        if (!versions_to_add.hasNext()) { // Handle degenerate case.
+        // Handle degenerate case, subcase 1 (no addition, no truncation):
+        if (!versions_to_add.hasNext() && branch_pos==null) {
             return new AppendSpecification(archive_size, baos.toByteArray());
         }
 
@@ -112,7 +122,12 @@ public class DeltaZip {
 			prev_version = cur;
 		}
 
-		pack_snapshot(prev_version, baos);
+        // Handle degenerate case, subcase 2 (truncation without addition):
+        if (prev_version == null) {
+            // Archive is to end up containing only the header.
+        } else {
+            pack_snapshot(prev_version, baos);
+        }
 
 		return new AppendSpecification(current_pos, baos.toByteArray());
 	}
@@ -271,7 +286,7 @@ public class DeltaZip {
 
     //==================== Iteration implementation ==============================
 
-    public abstract class IteratorBase implements Position {
+    public abstract class IteratorBase implements Cursor {
         protected static final int ENVELOPE_HEADER  = 4 + 4; // Start-tag + checksum
         protected static final int ENVELOPE_TRAILER = 4; // End.tag
         protected static final int ENVELOPE_OVERHEAD = ENVELOPE_HEADER + ENVELOPE_TRAILER;
@@ -282,16 +297,20 @@ public class DeltaZip {
         protected boolean current_has_metadata;
 
         @Override
-        public DeltaZip getOwningArchive() { return DeltaZip.this; }
-        @Override
-        public long getArchivePosition() {return current_pos;}
+        public Position getVersionStartPosition() {return new Position(current_pos);}
+        public Position getVersionEndPosition() {return new Position(calcVersionEndPosition());}
+
+        private long calcVersionEndPosition() {
+            return (current_pos==0) ? FILE_HEADER_LENGTH : current_pos + current_size + ENVELOPE_OVERHEAD;
+        }
+
         public int getCurrentChecksum() {return current_checksum;}
 
         protected boolean thereIsAPreviousVersion() {
             return current_pos > FILE_HEADER_LENGTH;
         }
         protected boolean thereIsANextVersion() {
-            return current_pos + current_size + ENVELOPE_OVERHEAD < archive_size;
+            return calcVersionEndPosition() < archive_size;
         }
 
         //========== Cursor manipulation:
@@ -313,7 +332,7 @@ public class DeltaZip {
         }
 
         protected void goto_next_position_and_read_envelope() throws IOException {
-            long start_pos = (current_pos==0) ? FILE_HEADER_LENGTH : current_pos + current_size + ENVELOPE_OVERHEAD;
+            long start_pos = calcVersionEndPosition();
 
             // Read envelope header:
             ByteBuffer header_buf = access.pread(start_pos, ENVELOPE_HEADER);
@@ -430,6 +449,22 @@ public class DeltaZip {
             this.current_pos = archive_size;
         }
 
+        public BackwardIterator(Position initial_pos) {
+            this();
+            if (initial_pos != null) {
+                verifyPositionOwnership(initial_pos);
+                long targetPos = initial_pos.getArchivePosition();
+                while (this.current_pos > targetPos && hasNext()) {
+                    next();
+                }
+                long actualPos = this.current_pos;
+                if (actualPos != targetPos) {
+                    throw new IllegalStateException("Inconsistency error - cannot rewind to position "+targetPos+
+                            " - ended at "+actualPos);
+                }
+            }
+        }
+
         @Override
         public void remove() { throw new UnsupportedOperationException(); }
 
@@ -538,18 +573,30 @@ public class DeltaZip {
 		}
 	}
 
-    public interface Position {
-        public long getArchivePosition();
-        public DeltaZip getOwningArchive();
+    public interface Cursor {
+        public Position getVersionStartPosition();
+        public Position getVersionEndPosition();
     }
 
-    public interface VersionIterator extends Iterator<Version>, Position {
+    public final class Position {
+        private long archive_position;
+
+        public Position(long archive_position) {
+            this.archive_position = archive_position;
+        }
+
+        public DeltaZip getOwningArchive() {return DeltaZip.this;}
+        public long getArchivePosition() {return archive_position;}
+
+    }
+
+    public interface VersionIterator extends Iterator<Version>, Cursor {
         public int getCurrentChecksum();
         public int getCurrentMethod();
         public int getCurrentCompSize();
         public int getCurrentRawSize();
     }
 
-    public interface MetadataIterator extends Iterator<List<Metadata.Item>>, Position {
+    public interface MetadataIterator extends Iterator<List<Metadata.Item>>, Cursor {
     }
 }

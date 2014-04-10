@@ -331,41 +331,86 @@ public class DeltaZipTest {
 			for (int i=1; i<versions.length; i++) {
 				byte[] tmp = DZUtil.allToByteArray(versions[i-1]);
 
-				// Single-byte mutations:
 				int nMutations = rnd.nextInt(20);
-				for (int j=0; j<nMutations; j++)
-					tmp[rnd.nextInt(tmp.length)] = (byte) rnd.nextInt(256);
-				versions[i] = ByteBuffer.wrap(tmp);
-
-				// Random runs:
 				int nRuns = rnd.nextInt(10);
-				for (int j=0; j<nRuns; j++) {
-					int start = 0, end = tmp.length;
-					int iters = rnd.nextInt(10);
-					for (int k=0; k<iters && start<end; k++) { // Select part.
-						int mid = start + rnd.nextInt(end - start);
-						if (rnd.nextBoolean()) start=mid; else end=mid;
-					}
-
-					for (int k=start; k<end; k++) tmp[k] = (byte)rnd.nextInt(256);
-				}
-				
-
-				// Block swaps:
 				int nSwaps = rnd.nextInt(10);
-				for (int j=0; j<nSwaps; j++) {
-					//TODO
-				}
+                mutate(tmp, nMutations, nRuns, nSwaps, rnd);
 
-				versions[i] = ByteBuffer.wrap(tmp);
+                versions[i] = ByteBuffer.wrap(tmp);
 			}
 			
 			series_test_with(versions);
 		}
 	}
 
+    @Test
+    public void somewhat_related_branch_test() throws IOException {
+        final Random rnd = new Random();
+        final int maxMetadataItems = 20;
 
-	public void series_test_with(ByteBuffer[] versions) throws IOException {
+        for (int test_nr=0; test_nr<200; test_nr++) {
+            int nVersions1 = rnd.nextInt(10); // [0;9]
+            int nVersions2 = rnd.nextInt(10); // [0;9]
+            int prefix_length = rnd.nextInt(nVersions1+1); // [0;nVersions1]
+            int versionSize = rnd.nextInt(1000); // Up to 1K.
+
+            Version seed_version = new Version(createRandomBinary(versionSize, rnd), Collections.<Metadata.Item>emptyList());
+            List<Version> versions1 = createRelatedVersionSequence(seed_version, nVersions1, maxMetadataItems, rnd);
+            Version branch_version = prefix_length > 0 ? versions1.get(prefix_length-1) : seed_version;
+            List<Version> versions2 = createRelatedVersionSequence(branch_version, nVersions2, maxMetadataItems, rnd);
+
+            branch_test_with(versions1, prefix_length, versions2);
+        }
+    }
+
+    private List<Version> createRelatedVersionSequence(Version prev_version, int version_count, int maxMetadataItemCount, Random rnd) {
+        ArrayList<Version> versions = new ArrayList<Version>(version_count);
+        for (int i=0; i<version_count; i++) {
+            byte[] tmp = DZUtil.allToByteArray(prev_version.getContents());
+
+            int nMutations = rnd.nextInt(20);
+            int nRuns = rnd.nextInt(10);
+            int nSwaps = rnd.nextInt(10);
+            mutate(tmp, nMutations, nRuns, nSwaps, rnd);
+
+            versions.add(new Version(tmp, MetadataTest.randomMetadata(maxMetadataItemCount, 20, rnd)));
+        }
+        return versions;
+    }
+
+    private void mutate(byte[] data, int nMutations, int nRuns, int nSwaps, Random rnd) {
+        if (data.length==0) return;
+
+        // Single-byte mutations:
+        for (int j=0; j<nMutations; j++)
+            data[rnd.nextInt(data.length)] = (byte) rnd.nextInt(256);
+
+        // Random runs:
+        for (int j=0; j<nRuns; j++) {
+            int start = 0, end = data.length;
+            int iters = rnd.nextInt(10);
+            for (int k=0; k<iters && start<end; k++) { // Select part.
+                int mid = start + rnd.nextInt(end - start);
+                if (rnd.nextBoolean()) start=mid; else end=mid;
+            }
+
+            for (int k=start; k<end; k++) data[k] = (byte)rnd.nextInt(256);
+        }
+
+        // Block swaps:
+        for (int j=0; j<nSwaps; j++) {
+            int pos2 = rnd.nextInt(data.length+1);
+            int pos1 = rnd.nextInt(pos2+1);
+            int pos3 = rnd.nextInt(data.length-pos2+1)+pos2;
+            byte[] tmp = new byte[pos3-pos1];
+            System.arraycopy(data,pos1, tmp,0, pos3-pos1);
+            System.arraycopy(tmp,pos2-pos1, data,pos1, pos3-pos2);
+            System.arraycopy(tmp,0, data,pos1+(pos3-pos2), pos2-pos1);
+        }
+    }
+
+
+    public void series_test_with(ByteBuffer[] versions) throws IOException {
 		byte[] file = new byte[0];
 
 		System.err.print("<");
@@ -382,6 +427,55 @@ public class DeltaZipTest {
         assertArchiveContentsEquals(versions, file);
         System.err.println(">");
 	}
+
+    private void branch_test_with(List<Version> versions1, int prefix_length, List<Version> versions2) throws IOException {
+        byte[] file0 = new byte[0];
+        final byte[] file1;
+        { // Build origin archive:
+            ByteArrayAccess access = new ByteArrayAccess(file0);
+            DeltaZip dz = new DeltaZip(access);
+
+            AppendSpecification app_spec = dz.add(versions1);
+            file1 = access.applyAppendSpec(app_spec);
+        }
+        final byte[] file2;
+        { // Build branched archive:
+            ByteArrayAccess access = new ByteArrayAccess(file1);
+            DeltaZip dz = new DeltaZip(access);
+            DeltaZip.MetadataIterator iter = dz.forwardMetadataIterator();
+            for (int i=0; i<prefix_length; i++) {
+                iter.next();
+            }
+            DeltaZip.Position branchPosition = iter.getVersionEndPosition();
+            AppendSpecification app_spec = dz.add(branchPosition, versions2);
+            file2 = access.applyAppendSpec(app_spec);
+        }
+        { // Verify contents:
+            Version[] expectedContents = new Version[prefix_length + versions2.size()];
+            {
+                int pos=0;
+                for (int i=0; i<prefix_length; i++) {
+                    expectedContents[pos++] = versions1.get(i);
+                }
+                for (int i=0; i<versions2.size(); i++) {
+                    expectedContents[pos++] = versions2.get(i);
+                }
+            }
+
+            ByteArrayAccess access = new ByteArrayAccess(file2);
+            DeltaZip dz = new DeltaZip(access);
+            //System.err.println("Versions1 ("+versions1.size()+"): "+versions1);
+            //System.err.println("Versions2 ("+versions2.size()+"): "+versions2);
+            //System.err.println("Prefix length: "+prefix_length);
+            ArrayList<Version> result = new ArrayList<Version>();
+            for (Version version : dz.backwardIterable()) {
+                result.add(version);
+            }
+
+            //System.err.println("Resulting archive: "+result);
+            assertArchiveContentsEquals(expectedContents, dz);
+        }
+    }
 
     private void assertArchiveContentsEquals(ByteBuffer[] versions, byte[] file) throws IOException {
         // Verify contents:
@@ -434,14 +528,7 @@ public class DeltaZipTest {
 
         ByteArrayAccess access = new ByteArrayAccess(file);
         DeltaZip dz = new DeltaZip(access);
-        {// Verify contents:
-            int i=versions.length-1;
-            for (Version version : dz.backwardIterable()) {
-                assertEquals(version, versions[i]);
-                i--;
-            }
-            assertEquals("There are only the expected number of versions", i, -1);
-        }
+        assertArchiveContentsEquals(versions, dz);
 
         { // Verify metadata backwards:
             int i=versions.length-1;
@@ -461,6 +548,16 @@ public class DeltaZipTest {
         }
         System.err.println(">");
 
+    }
+
+    private void assertArchiveContentsEquals(Version[] versions, DeltaZip dz) {
+        // Verify contents:
+        int i=versions.length-1;
+        for (Version version : dz.backwardIterable()) {
+            assertEquals(version, versions[i]);
+            i--;
+        }
+        assertEquals("There are only the expected number of versions", i, -1);
     }
 
     //======================================================================

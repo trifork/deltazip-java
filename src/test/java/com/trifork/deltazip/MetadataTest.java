@@ -25,13 +25,7 @@ public class MetadataTest {
     @Test
     public void opaqueFieldsTest() throws IOException {
         for (int i=1; i<=300; i++) {
-            int fieldCount = 1 + rnd.nextInt(i);
-            List<Metadata.Item> items = new ArrayList(fieldCount);
-            for (int j=0; j<fieldCount; j++) {
-                int keytag = 1 + rnd.nextInt(Integer.MAX_VALUE);
-                byte[] blob = randomBlob(10*i);
-                items.add(new Metadata.Item(keytag, blob));
-            }
+            List<Metadata.Item> items = randomMetadata(i, 10*i, rnd);
             testEncodeDecode(items);
         }
     }
@@ -64,21 +58,32 @@ public class MetadataTest {
     @Test
     public void versionIDsTest() throws IOException {
         for (int i=1; i<=100; i++) {
-            byte[] id = randomBlob(5*i);
+            byte[] id = randomBlob(5*i, rnd);
             List<Metadata.Item> outItems = testEncodeDecode(Collections.<Metadata.Item>singletonList(new Metadata.VersionID(id)));
             Metadata.Item out = outItems.get(0);
             assertEquals(Metadata.VersionID.class, out.getClass());
         }
 
         for (int i=1; i<=100; i++) {
-            byte[] id = randomBlob(5*i);
+            byte[] id = randomBlob(5*i, rnd);
             List<Metadata.Item> outItems = testEncodeDecode(Collections.<Metadata.Item>singletonList(new Metadata.Ancestor(id)));
             Metadata.Item out = outItems.get(0);
             assertEquals(Metadata.Ancestor.class, out.getClass());
         }
     }
 
-    private byte[] randomBlob(int maxSize) {
+    public static List<Metadata.Item> randomMetadata(int maxItemCount, int maxItemLength, Random rnd) {
+        int fieldCount = rnd.nextInt(maxItemCount+1);
+        List<Metadata.Item> items = new ArrayList(fieldCount);
+        for (int j=0; j<fieldCount; j++) {
+            int keytag = 1 + rnd.nextInt(Integer.MAX_VALUE);
+            byte[] blob = randomBlob(maxItemLength, rnd);
+            items.add(new Metadata.Item(keytag, blob));
+        }
+        return items;
+    }
+
+    private static byte[] randomBlob(int maxSize, Random rnd) {
         byte[] blob = new byte[rnd.nextInt(maxSize+1)];
         rnd.nextBytes(blob);
         return blob;
