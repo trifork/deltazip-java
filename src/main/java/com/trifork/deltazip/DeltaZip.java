@@ -104,7 +104,7 @@ public class DeltaZip {
 
         VersionIterator iter = backwardIterator();
         Version prev_version = iter.hasNext() ? iter.next() : null;
-        long current_pos = iter.getCurrentPosition();
+        long current_pos = iter.getArchivePosition();
 
         // If the file is empty, add a header:
         if (current_pos ==0) baos.writeBigEndianInteger(DELTAZIP_MAGIC_HEADER | VERSION_11, 4);
@@ -290,7 +290,7 @@ public class DeltaZip {
         protected int        current_checksum;
         protected boolean current_has_metadata;
 
-        public long getCurrentPosition() {return current_pos;}
+        public long getArchivePosition() {return current_pos;}
         public int getCurrentChecksum() {return current_checksum;}
 
         protected boolean thereIsAPreviousVersion() {
@@ -367,9 +367,6 @@ public class DeltaZip {
         }
 
         @Override
-        public long getCurrentPosition() {return this.current_pos;}
-
-        @Override
         public void remove() { throw new UnsupportedOperationException(); }
 
         @Override
@@ -402,9 +399,6 @@ public class DeltaZip {
             this.current_pos = 0;
             this.current_size = 4;
         }
-
-        @Override
-        public long getCurrentPosition() {return this.current_pos;}
 
         @Override
         public void remove() { throw new UnsupportedOperationException(); }
@@ -545,15 +539,17 @@ public class DeltaZip {
 		}
 	}
 
-    public interface VersionIterator extends Iterator<Version> {
-        public long getCurrentPosition();
+    public interface Position {
+        public long getArchivePosition();
+    }
+
+    public interface VersionIterator extends Iterator<Version>, Position {
         public int getCurrentChecksum();
         public int getCurrentMethod();
         public int getCurrentCompSize();
         public int getCurrentRawSize();
     }
 
-    public interface MetadataIterator extends Iterator<List<Metadata.Item>> {
-        public long getCurrentPosition();
+    public interface MetadataIterator extends Iterator<List<Metadata.Item>>, Position {
     }
 }
