@@ -280,7 +280,7 @@ public class DeltaZip {
 
     //==================== Iteration implementation ==============================
 
-    public abstract class IteratorBase {
+    public abstract class IteratorBase implements Position {
         protected static final int ENVELOPE_HEADER  = 4 + 4; // Start-tag + checksum
         protected static final int ENVELOPE_TRAILER = 4; // End.tag
         protected static final int ENVELOPE_OVERHEAD = ENVELOPE_HEADER + ENVELOPE_TRAILER;
@@ -290,6 +290,9 @@ public class DeltaZip {
         protected int        current_checksum;
         protected boolean current_has_metadata;
 
+        @Override
+        public DeltaZip getOwningArchive() { return DeltaZip.this; }
+        @Override
         public long getArchivePosition() {return current_pos;}
         public int getCurrentChecksum() {return current_checksum;}
 
@@ -508,7 +511,12 @@ public class DeltaZip {
 
             return cm.uncompress(data_buf, current_version, inflater);
         }
+    }
 
+    private void verifyPositionOwnership(Position pos) {
+        if (pos.getOwningArchive() != this) {
+            throw new IllegalArgumentException("This Position belongs to another archive");
+        }
     }
 
     //==================== Compression methods =============================
@@ -541,6 +549,7 @@ public class DeltaZip {
 
     public interface Position {
         public long getArchivePosition();
+        public DeltaZip getOwningArchive();
     }
 
     public interface VersionIterator extends Iterator<Version>, Position {
