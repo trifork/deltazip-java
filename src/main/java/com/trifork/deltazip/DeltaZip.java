@@ -145,17 +145,17 @@ public class DeltaZip {
         return new BackwardIterator();
     }
 
-    public Iterable<List<Metadata.Item>> backwardsMetadataIterable() {
+    public Iterable<List<Metadata.Item>> backwardMetadataIterable() {
         return new Iterable() {
             @Override
             public MetadataIterator iterator() {
-                return backwardsMetadataIterator();
+                return backwardMetadataIterator();
             }
         };
     }
 
-    public MetadataIterator backwardsMetadataIterator() {
-        return new BackwardsMetadataIterator();
+    public MetadataIterator backwardMetadataIterator() {
+        return new BackwardMetadataIterator();
     }
 
     //==================== Internals =======================================
@@ -339,10 +339,10 @@ public class DeltaZip {
         }
     }
 
-    private class BackwardsMetadataIterator extends IteratorBase implements MetadataIterator {
+    private class BackwardMetadataIterator extends IteratorBase implements MetadataIterator {
         private List<Metadata.Item> current_metadata;
 
-        public BackwardsMetadataIterator() {
+        public BackwardMetadataIterator() {
             this.current_pos = archive_size;
         }
 

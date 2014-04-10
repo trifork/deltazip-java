@@ -111,7 +111,7 @@ public class DeltaZipTest {
         }
 
         { // Test backwards metadata-only iterator:
-            DeltaZip.MetadataIterator iter = dz.backwardsMetadataIterator();
+            DeltaZip.MetadataIterator iter = dz.backwardMetadataIterator();
 
             assertTrue(iter.hasNext());
             List<Metadata.Item> actual_md1 = iter.next();
@@ -177,7 +177,7 @@ public class DeltaZipTest {
             DeltaZip.VersionIterator iter0 = dz0.backwardIterator();
             assertFalse(iter0.hasNext());
 
-            DeltaZip.MetadataIterator mditer0 = dz0.backwardsMetadataIterator();
+            DeltaZip.MetadataIterator mditer0 = dz0.backwardMetadataIterator();
             assertFalse(mditer0.hasNext());
         }
 
@@ -426,7 +426,7 @@ public class DeltaZipTest {
 
         { // Verify metadata backwards:
             int i=versions.length-1;
-            for (List<Metadata.Item> metadat : dz.backwardsMetadataIterable()) {
+            for (List<Metadata.Item> metadat : dz.backwardMetadataIterable()) {
                 assertEquals(metadat, versions[i].getMetadata());
                 i--;
             }
