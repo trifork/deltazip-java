@@ -296,7 +296,7 @@ public class DeltaZip {
 
         //========== Cursor manipulation:
 
-        protected void goto_previous_position_and_read_header() throws IOException {
+        protected void goto_previous_position_and_read_envelope() throws IOException {
             // Read envelope trailer:
             ByteBuffer trailer_buf = access.pread(current_pos-ENVELOPE_TRAILER, ENVELOPE_TRAILER);
             int tag = trailer_buf.getInt(0);
@@ -312,7 +312,7 @@ public class DeltaZip {
             set_cursor_common(tag, tag2, start_pos, size, adler32);
         }
 
-        protected void goto_next_position_and_read_header() throws IOException {
+        protected void goto_next_position_and_read_envelope() throws IOException {
             long start_pos = (current_pos==0) ? FILE_HEADER_LENGTH : current_pos + current_size + ENVELOPE_OVERHEAD;
 
             // Read envelope header:
@@ -376,7 +376,7 @@ public class DeltaZip {
         public List<Metadata.Item> next() {
             if (!hasNext()) throw new IllegalStateException();
             try {
-                goto_previous_position_and_read_header();
+                goto_previous_position_and_read_envelope();
                 this.current_metadata = extract_just_metadata();
             } catch (IOException ioe) {
                 throw new RuntimeException(ioe);
@@ -410,7 +410,7 @@ public class DeltaZip {
         public List<Metadata.Item> next() {
             if (!hasNext()) throw new IllegalStateException();
             try {
-                goto_next_position_and_read_header();
+                goto_next_position_and_read_envelope();
                 this.current_metadata = extract_just_metadata();
             } catch (IOException ioe) {
                 throw new RuntimeException(ioe);
@@ -436,7 +436,7 @@ public class DeltaZip {
         @Override
         /** Tells whether there are older revisions. */
         public boolean hasNext() {
-            return current_pos > FILE_HEADER_LENGTH;
+            return thereIsAPreviousVersion();
         }
 
         public int getCurrentMethod()   {return current_method;}
@@ -474,7 +474,7 @@ public class DeltaZip {
         }
 
         private void goto_previous_position_and_compute_current_version() throws ArchiveIntegrityException, IOException {
-            goto_previous_position_and_read_header();
+            goto_previous_position_and_read_envelope();
 
             ByteBuffer data_buf = access.pread(current_pos + ENVELOPE_HEADER, current_size);
             List<Metadata.Item> metadata =
