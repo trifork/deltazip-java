@@ -41,36 +41,5 @@ public class DeltaZipDataArchive implements DataArchive {
         };
 	}
 
-	//======================================================================
-    /*
-	private static class MyIterator implements Iterator<ByteBuffer> {
-		final DeltaZip dz;
-		ByteBuffer next;
-		public MyIterator(DeltaZip org_dz) throws IOException {
-			this.dz = org_dz.clone();
-			dz.resetCursor();
-			next = dz.get();
-		}
-		
-		@Override
-		public boolean hasNext() {return (next!=null);}
-		
-		@Override
-		public ByteBuffer next() {
-			ByteBuffer tmp = next;
-			if (dz.hasPrevious()) {
-				try {
-					dz.previous();
-				} catch (IOException ioe) {throw new RuntimeException(ioe);}
-				next = dz.get();
-			} else next=null;
-			return tmp;
-		}
-
-		@Override
-		public void remove() {throw new UnsupportedOperationException();}
-	}
-	*/
-
 }
 	
