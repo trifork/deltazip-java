@@ -68,37 +68,28 @@ public class DeltaZip {
         this.archive_size = access.getSize();
     }
 
-	/** Computes an AppendSpecification for adding a version.
-	 *  Has the side effect of placing the cursor at the end.
-	 */
+	/** Computes an AppendSpecification for adding a version. */
 	public AppendSpecification add(ByteBuffer new_version) throws IOException {
         return add(new Version(new_version));
     }
 
-    /** Computes an AppendSpecification for adding a version.
-     *  Has the side effect of placing the cursor at the end.
-     */
+    /** Computes an AppendSpecification for adding a version. */
     public AppendSpecification add(ByteBuffer new_version, List<Metadata.Item> metadata) throws IOException {
         return add(new Version(new_version, metadata));
     }
 
-    /** Computes an AppendSpecification for adding a version.
-	 *  Has the side effect of placing the cursor at the end.
-	 */
+    /** Computes an AppendSpecification for adding a version. */
 	public AppendSpecification add(Version new_version) throws IOException {
         return add(Collections.singletonList(new_version).iterator());
 	}
 
     /** Computes an AppendSpecification for adding a version.
-     *  Has the side effect of placing the cursor at the end.
      */
     public AppendSpecification add(Iterable<Version> versions_to_add) throws IOException {
         return add(versions_to_add.iterator());
     }
 
-    /** Computes an AppendSpecification for adding a version.
-     *  Has the side effect of placing the cursor at the end.
-     */
+    /** Computes an AppendSpecification for adding a version. */
 	public AppendSpecification add(Iterator<Version> versions_to_add) throws IOException {
 		ExtByteArrayOutputStream baos = new ExtByteArrayOutputStream();
 
