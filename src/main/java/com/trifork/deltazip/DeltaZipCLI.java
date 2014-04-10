@@ -47,7 +47,7 @@ public abstract class DeltaZipCLI {
 		DeltaZip dz = new DeltaZip(fa);
 
         int count = 0;
-        for (Version v : dz.backwardsIterable()) {
+        for (Version v : dz.backwardIterable()) {
 			count++;
         }
 
@@ -64,7 +64,7 @@ public abstract class DeltaZipCLI {
 		System.out.println("Nr:\tMethod\tCompSize\tVersionSize\tChecksum\tMetadata");
 
 		int nr = 0;
-        DeltaZip.VersionIterator iter = dz.backwardsIterator();
+        DeltaZip.VersionIterator iter = dz.backwardIterator();
         while (iter.hasNext()) {
             Version version = iter.next();
             String line =
@@ -120,7 +120,7 @@ public abstract class DeltaZipCLI {
         FileAccess fa = openDZFile(args[file_arg]);
 		DeltaZip dz = new DeltaZip(fa);
 
-        DeltaZip.VersionIterator iter = dz.backwardsIterator();
+        DeltaZip.VersionIterator iter = dz.backwardIterator();
         if (! iter.hasNext()) {
             System.err.println("Archive is empty.");
             System.exit(3);

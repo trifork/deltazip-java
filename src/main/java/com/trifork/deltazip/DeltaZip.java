@@ -102,7 +102,7 @@ public class DeltaZip {
 	public AppendSpecification add(Iterator<Version> versions_to_add) throws IOException {
 		ExtByteArrayOutputStream baos = new ExtByteArrayOutputStream();
 
-        VersionIterator iter = backwardsIterator();
+        VersionIterator iter = backwardIterator();
         Version prev_version = iter.hasNext() ? iter.next() : null;
         long current_pos = iter.getCurrentPosition();
 
@@ -128,21 +128,21 @@ public class DeltaZip {
 
     /** Return the most recent version, or null if the archive is empty. */
     public Version latestVersion() {
-        VersionIterator iter = backwardsIterator();
+        VersionIterator iter = backwardIterator();
         return iter.hasNext() ? iter.next() : null;
     }
 
-    public Iterable<Version> backwardsIterable() {
+    public Iterable<Version> backwardIterable() {
         return new Iterable() {
             @Override
             public Iterator iterator() {
-                return backwardsIterator();
+                return backwardIterator();
             }
         };
     }
 
-    public VersionIterator backwardsIterator() {
-        return new BackwardsIterator();
+    public VersionIterator backwardIterator() {
+        return new BackwardIterator();
     }
 
     public Iterable<List<Metadata.Item>> backwardsMetadataIterable() {
@@ -380,13 +380,13 @@ public class DeltaZip {
         }
     }
 
-    private class BackwardsIterator extends IteratorBase implements VersionIterator {
+    private class BackwardIterator extends IteratorBase implements VersionIterator {
         private final Inflater inflater = new Inflater(true);
         private byte[]     current_version;
         private ByteBuffer exposed_current_version;
         private List<Metadata.Item> current_metadata;
 
-        public BackwardsIterator() {
+        public BackwardIterator() {
             this.current_pos = archive_size;
         }
 

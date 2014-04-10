@@ -14,7 +14,7 @@ public class DeltaZipDataArchive implements DataArchive {
 	}
 		
 	public ByteBuffer getLatest() {
-		return dz.backwardsIterator().next().getContents();
+		return dz.backwardIterator().next().getContents();
 	}
 		
 	public void addVersion(ByteBuffer new_version) throws IOException {
@@ -26,7 +26,7 @@ public class DeltaZipDataArchive implements DataArchive {
 	public ByteBuffer getRawData() {return access.getRawData();}
 
 	public Iterator<ByteBuffer> iterator() {
-        final DeltaZip.VersionIterator versionIterator = dz.backwardsIterator();
+        final DeltaZip.VersionIterator versionIterator = dz.backwardIterator();
         return new Iterator<ByteBuffer>() {
             @Override
             public boolean hasNext() { return versionIterator.hasNext(); }
